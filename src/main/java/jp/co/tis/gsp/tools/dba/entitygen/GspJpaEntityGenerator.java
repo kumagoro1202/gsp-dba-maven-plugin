@@ -28,7 +28,10 @@ import org.jooq.meta.UniqueKeyDefinition;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * jOOQ JavaGeneratorを拡張し、gsp-dba-maven-plugin互換のJPA Entityを生成する。
@@ -42,7 +45,12 @@ import java.util.List;
  *   <li>useAccessor=false時: publicフィールド（gspデフォルト）</li>
  *   <li>useAccessor=true時: privateフィールド + getter/setter</li>
  *   <li>versionColumnNamePattern指定時: 一致カラムに{@code @Version}付与</li>
+ *   <li>FK関連: {@code @ManyToOne}, {@code @OneToMany}, {@code @JoinColumn}</li>
+ *   <li>複合ユニーク制約: {@code @UniqueConstraint}</li>
  * </ul>
+ *
+ * <p>FK/UniqueConstraint情報は{@link GspRelationSupport}経由で
+ * JDBC DatabaseMetaDataから直接取得する（jOOQ APIのFK取得問題を回避）。</p>
  *
  * <p>Mojoパラメータは{@link GspEntityGenerationConfig.EntityGenParams}経由で
  * ThreadLocalから取得する。</p>
@@ -63,6 +71,13 @@ public class GspJpaEntityGenerator extends JavaGenerator {
 
         // VIEW判定
         boolean isViewTable = GspViewSupport.isView(table.getOutputName());
+
+        // FK/UK事前計算（GspRelationSupport経由でJDBC metadataから取得）
+        String tableName = table.getOutputName();
+        List<GspRelationSupport.ForeignKeyDef> forwardFKs = GspRelationSupport.getForeignKeys(tableName);
+        Set<String> fkColumnNames = collectFKColumnNames(forwardFKs);
+        List<GspRelationSupport.ForeignKeyDef> inverseFKs = GspRelationSupport.getInverseForeignKeys(tableName);
+        Map<String, List<String>> uniqueConstraints = GspRelationSupport.getUniqueConstraints(tableName);
 
         // バージョンカラムの事前判定（import生成に必要）
         boolean hasVersionColumn = false;
@@ -90,18 +105,34 @@ public class GspJpaEntityGenerator extends JavaGenerator {
         }
 
         boolean hasIdentity = hasIdentityColumn(table);
-        boolean hasSequence = false;
         if (hasId && !isViewTable) {
             out.println("import jakarta.persistence.GeneratedValue;");
             out.println("import jakarta.persistence.GenerationType;");
             if (!hasIdentity) {
                 out.println("import jakarta.persistence.SequenceGenerator;");
-                hasSequence = true;
             }
         }
 
         if (hasVersionColumn) {
             out.println("import jakarta.persistence.Version;");
+        }
+
+        // FK関連import
+        boolean hasFKs = !forwardFKs.isEmpty();
+        boolean hasInverseFKs = !inverseFKs.isEmpty();
+
+        if (hasFKs) {
+            out.println("import jakarta.persistence.JoinColumn;");
+            if (hasCompositeForeignKey(forwardFKs)) {
+                out.println("import jakarta.persistence.JoinColumns;");
+            }
+            out.println("import jakarta.persistence.ManyToOne;");
+        }
+        if (hasInverseFKs) {
+            out.println("import jakarta.persistence.OneToMany;");
+        }
+        if (!uniqueConstraints.isEmpty()) {
+            out.println("import jakarta.persistence.UniqueConstraint;");
         }
 
         // 型インポート
@@ -118,16 +149,11 @@ public class GspJpaEntityGenerator extends JavaGenerator {
         out.println("@Generated(\"GSP\")");
         out.println("@Entity");
 
-        // @Table
+        // @Table（UniqueConstraint対応）
         SchemaDefinition schema = table.getSchema();
         String schemaName = schema != null ? schema.getOutputName() : null;
-        String tableName = table.getOutputName();
 
-        if (schemaName != null && !schemaName.isEmpty() && !"PUBLIC".equals(schemaName)) {
-            out.println("@Table(schema = \"%s\", name = \"%s\")", schemaName, tableName);
-        } else {
-            out.println("@Table(name = \"%s\")", tableName);
-        }
+        generateTableAnnotation(out, schemaName, tableName, uniqueConstraints);
 
         // クラス宣言
         out.println("public class %s implements Serializable {", className);
@@ -146,6 +172,7 @@ public class GspJpaEntityGenerator extends JavaGenerator {
             String fieldName = getStrategy().getJavaMemberName(column, Mode.POJO);
             String javaType = getJavaType(column);
             boolean isPk = isPrimaryKey(table, column);
+            boolean isFkColumn = fkColumnNames.contains(column.getName());
 
             // コメント
             String comment = column.getComment();
@@ -201,6 +228,12 @@ public class GspJpaEntityGenerator extends JavaGenerator {
             }
             colAnnotation.append(", nullable = ").append(nullable);
             colAnnotation.append(", unique = ").append(isPk && getPrimaryKeyColumnCount(table) == 1);
+
+            // FKカラムはinsertable/updatable = false
+            if (isFkColumn) {
+                colAnnotation.append(", insertable = false, updatable = false");
+            }
+
             colAnnotation.append(")");
             out.println(colAnnotation.toString());
 
@@ -215,22 +248,42 @@ public class GspJpaEntityGenerator extends JavaGenerator {
             }
         }
 
+        // @ManyToOne関連フィールド
+        List<String> manyToOneFieldNames = new ArrayList<>();
+        List<String> manyToOneTypes = new ArrayList<>();
+        for (GspRelationSupport.ForeignKeyDef fk : forwardFKs) {
+            String refTableName = fk.getPkTableName();
+            String refClassName = toPascalCase(refTableName);
+            String mtoFieldName = toFieldName(refClassName);
+
+            generateManyToOneField(out, fk, refClassName, accessModifier);
+            manyToOneFieldNames.add(mtoFieldName);
+            manyToOneTypes.add(refClassName);
+        }
+
+        // @OneToMany関連フィールド
+        List<String> oneToManyFieldNames = new ArrayList<>();
+        List<String> oneToManyTypes = new ArrayList<>();
+        for (GspRelationSupport.ForeignKeyDef inverseFk : inverseFKs) {
+            String refTableName = inverseFk.getFkTableName();
+            String refClassName = toPascalCase(refTableName);
+            String currentClassName = toPascalCase(tableName);
+
+            String otmFieldName = generateOneToManyField(out, refClassName, currentClassName, accessModifier);
+            oneToManyFieldNames.add(otmFieldName);
+            oneToManyTypes.add("java.util.List<" + refClassName + ">");
+        }
+
         // アクセサ（getter/setter）の生成
         if (useAccessor) {
             for (int i = 0; i < fieldNames.size(); i++) {
-                String fieldName = fieldNames.get(i);
-                String simpleType = fieldSimpleTypes.get(i);
-                String capitalizedName = Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
-                String getterPrefix = "boolean".equals(simpleType) ? "is" : "get";
-
-                out.println();
-                out.println("    public %s %s%s() {", simpleType, getterPrefix, capitalizedName);
-                out.println("        return %s;", fieldName);
-                out.println("    }");
-                out.println();
-                out.println("    public void set%s(%s %s) {", capitalizedName, simpleType, fieldName);
-                out.println("        this.%s = %s;", fieldName, fieldName);
-                out.println("    }");
+                generateAccessor(out, fieldNames.get(i), fieldSimpleTypes.get(i));
+            }
+            for (int i = 0; i < manyToOneFieldNames.size(); i++) {
+                generateAccessor(out, manyToOneFieldNames.get(i), manyToOneTypes.get(i));
+            }
+            for (int i = 0; i < oneToManyFieldNames.size(); i++) {
+                generateAccessor(out, oneToManyFieldNames.get(i), oneToManyTypes.get(i));
             }
         }
 
@@ -239,10 +292,157 @@ public class GspJpaEntityGenerator extends JavaGenerator {
     }
 
     /**
-     * テーブルがVIEWであるかを判定する。
+     * @Tableアノテーションを生成する（UniqueConstraint対応）。
      */
-    private boolean isView(TableDefinition table) {
-        return GspViewSupport.isView(table.getOutputName());
+    private void generateTableAnnotation(JavaWriter out, String schemaName, String tableName,
+                                          Map<String, List<String>> uniqueConstraints) {
+        boolean hasSchema = schemaName != null && !schemaName.isEmpty() && !"PUBLIC".equals(schemaName);
+        boolean hasUniqueConstraints = !uniqueConstraints.isEmpty();
+
+        StringBuilder sb = new StringBuilder("@Table(");
+        if (hasSchema) {
+            sb.append("schema = \"").append(schemaName).append("\", ");
+        }
+        sb.append("name = \"").append(tableName).append("\"");
+
+        if (hasUniqueConstraints) {
+            sb.append(", uniqueConstraints = {");
+            int i = 0;
+            for (Map.Entry<String, List<String>> entry : uniqueConstraints.entrySet()) {
+                if (i > 0) sb.append(", ");
+                sb.append("@UniqueConstraint(columnNames = {");
+                List<String> colNames = entry.getValue();
+                for (int j = 0; j < colNames.size(); j++) {
+                    if (j > 0) sb.append(", ");
+                    sb.append("\"").append(colNames.get(j)).append("\"");
+                }
+                sb.append("})");
+                i++;
+            }
+            sb.append("}");
+        }
+
+        sb.append(")");
+        out.println(sb.toString());
+    }
+
+    /**
+     * @ManyToOne + @JoinColumn フィールドを生成する。
+     */
+    private void generateManyToOneField(JavaWriter out, GspRelationSupport.ForeignKeyDef fk,
+                                          String refClassName, String accessModifier) {
+        String fieldName = toFieldName(refClassName);
+        List<GspRelationSupport.ForeignKeyColumn> fkCols = fk.getColumns();
+
+        out.println();
+        out.println("    /** %s関連プロパティ */", fieldName);
+        out.println("    @ManyToOne");
+
+        if (fkCols.size() == 1) {
+            GspRelationSupport.ForeignKeyColumn col = fkCols.get(0);
+            out.println("    @JoinColumn(name = \"%s\", referencedColumnName = \"%s\")",
+                col.getFkColumnName(), col.getPkColumnName());
+        } else {
+            // 複合FK
+            out.println("    @JoinColumns({");
+            for (int i = 0; i < fkCols.size(); i++) {
+                GspRelationSupport.ForeignKeyColumn col = fkCols.get(i);
+                String comma = (i < fkCols.size() - 1) ? "," : "";
+                out.println("        @JoinColumn(name = \"%s\", referencedColumnName = \"%s\")%s",
+                    col.getFkColumnName(), col.getPkColumnName(), comma);
+            }
+            out.println("    })");
+        }
+
+        out.println("    %s %s %s;", accessModifier, refClassName, fieldName);
+    }
+
+    /**
+     * @OneToMany フィールドを生成する。
+     *
+     * @return 生成されたフィールド名
+     */
+    private String generateOneToManyField(JavaWriter out, String referencingClassName,
+                                            String currentClassName, String accessModifier) {
+        // mappedBy = 参照元テーブルでの@ManyToOneフィールド名
+        String mappedBy = toFieldName(currentClassName);
+        String listFieldName = toFieldName(referencingClassName) + "List";
+
+        out.println();
+        out.println("    /** %s関連プロパティ */", listFieldName);
+        out.println("    @OneToMany(mappedBy = \"%s\")", mappedBy);
+        out.println("    %s java.util.List<%s> %s;", accessModifier, referencingClassName, listFieldName);
+
+        return listFieldName;
+    }
+
+    /**
+     * getter/setterを生成する。
+     */
+    private void generateAccessor(JavaWriter out, String fieldName, String type) {
+        String capitalizedName = Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
+        String getterPrefix = "boolean".equals(type) ? "is" : "get";
+
+        out.println();
+        out.println("    public %s %s%s() {", type, getterPrefix, capitalizedName);
+        out.println("        return %s;", fieldName);
+        out.println("    }");
+        out.println();
+        out.println("    public void set%s(%s %s) {", capitalizedName, type, fieldName);
+        out.println("        this.%s = %s;", fieldName, fieldName);
+        out.println("    }");
+    }
+
+    /**
+     * FKカラム名のセットを収集する。
+     */
+    private Set<String> collectFKColumnNames(List<GspRelationSupport.ForeignKeyDef> fks) {
+        Set<String> names = new HashSet<>();
+        for (GspRelationSupport.ForeignKeyDef fk : fks) {
+            for (GspRelationSupport.ForeignKeyColumn col : fk.getColumns()) {
+                names.add(col.getFkColumnName());
+            }
+        }
+        return names;
+    }
+
+    /**
+     * 複合FKが存在するかを判定する。
+     */
+    private boolean hasCompositeForeignKey(List<GspRelationSupport.ForeignKeyDef> fks) {
+        for (GspRelationSupport.ForeignKeyDef fk : fks) {
+            if (fk.getColumns().size() > 1) return true;
+        }
+        return false;
+    }
+
+    /**
+     * クラス名をフィールド名に変換する（先頭小文字化）。
+     */
+    private String toFieldName(String className) {
+        return Character.toLowerCase(className.charAt(0)) + className.substring(1);
+    }
+
+    /**
+     * テーブル名（UPPER_SNAKE_CASE）をPascalCaseに変換する。
+     * 例: TEST_TBL1 → TestTbl1, TYPETEST → Typetest
+     */
+    private String toPascalCase(String tableName) {
+        StringBuilder sb = new StringBuilder();
+        boolean nextUpper = true;
+        for (char c : tableName.toCharArray()) {
+            if (c == '_') {
+                nextUpper = true;
+            } else {
+                if (nextUpper) {
+                    sb.append(Character.toUpperCase(c));
+                    nextUpper = false;
+                } else {
+                    sb.append(Character.toLowerCase(c));
+                }
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -252,7 +452,6 @@ public class GspJpaEntityGenerator extends JavaGenerator {
     private boolean hasPrimaryKey(TableDefinition table) {
         UniqueKeyDefinition pk = table.getPrimaryKey();
         if (pk != null && !pk.getKeyColumns().isEmpty()) return true;
-        // VIEWの推定PKを確認
         return !getInferredOrActualPKs(table).isEmpty();
     }
 
@@ -275,7 +474,6 @@ public class GspJpaEntityGenerator extends JavaGenerator {
             return pk.getKeyColumns().stream()
                 .anyMatch(c -> c.getName().equals(column.getName()));
         }
-        // VIEWの推定PKを確認
         List<String> inferredPKs = getInferredOrActualPKs(table);
         return inferredPKs.stream()
             .anyMatch(pkName -> pkName.equalsIgnoreCase(column.getName()));

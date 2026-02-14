@@ -96,11 +96,13 @@ public class GspJpaEntityGeneratorTest {
 
     @After
     public void tearDown() throws Exception {
+        GspEntityGenerationConfig.clearParams();
         if (connection != null && !connection.isClosed()) {
             try (Statement stmt = connection.createStatement()) {
                 stmt.execute("DROP TABLE IF EXISTS TEST_TBL2");
                 stmt.execute("DROP TABLE IF EXISTS TEST_TBL1");
                 stmt.execute("DROP TABLE IF EXISTS TYPETEST");
+                stmt.execute("DROP TABLE IF EXISTS UNIQUE_TEST");
             }
             connection.close();
         }
@@ -194,5 +196,84 @@ public class GspJpaEntityGeneratorTest {
         assertTrue("DECIMAL → BigDecimal", content.contains("BigDecimal colDecimal"));
         assertTrue("DATE → Date", content.contains("Date colDate"));
         assertTrue("TIMESTAMP → Timestamp", content.contains("Timestamp colTimestamp"));
+    }
+
+    @Test
+    public void testForeignKeyRelationship() throws Exception {
+        File outputDir = tempDir.newFolder("generated_fk");
+
+        Configuration config = GspEntityGenerationConfig.create(
+            JDBC_URL, JDBC_USER, JDBC_PASSWORD, JDBC_DRIVER,
+            SCHEMA, "jp.co.tis.gsptest", "entity",
+            outputDir, "jpa",
+            "(SCHEMA_INFO|.*\\$.*)", false
+        );
+
+        try {
+            GenerationTool.generate(config);
+
+            File entityDir = new File(outputDir, "jp/co/tis/gsptest/entity");
+            String tbl2Content = Files.readString(new File(entityDir, "TestTbl2.java").toPath());
+
+            // @ManyToOne + @JoinColumn
+            assertTrue("@ManyToOneインポート", tbl2Content.contains("import jakarta.persistence.ManyToOne;"));
+            assertTrue("@JoinColumnインポート", tbl2Content.contains("import jakarta.persistence.JoinColumn;"));
+            assertTrue("@ManyToOneアノテーション", tbl2Content.contains("@ManyToOne"));
+            assertTrue("@JoinColumnアノテーション", tbl2Content.contains("@JoinColumn("));
+            assertTrue("referencedColumnNameがある", tbl2Content.contains("referencedColumnName ="));
+
+            // FKカラムにinsertable=false, updatable=false
+            assertTrue("FKカラムはinsertable=false",
+                tbl2Content.contains("insertable = false, updatable = false"));
+
+            // TestTbl1の@OneToMany
+            String tbl1Content = Files.readString(new File(entityDir, "TestTbl1.java").toPath());
+            assertTrue("@OneToManyインポート", tbl1Content.contains("import jakarta.persistence.OneToMany;"));
+            assertTrue("@OneToManyアノテーション", tbl1Content.contains("@OneToMany(mappedBy ="));
+            assertTrue("List<TestTbl2>型フィールド", tbl1Content.contains("java.util.List<TestTbl2>"));
+        } finally {
+            GspEntityGenerationConfig.clearParams();
+        }
+    }
+
+    @Test
+    public void testUniqueConstraint() throws Exception {
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute(
+                "CREATE TABLE UNIQUE_TEST ("
+                + "  UNIQUE_TEST_ID BIGINT NOT NULL PRIMARY KEY,"
+                + "  CODE VARCHAR(50) NOT NULL,"
+                + "  CATEGORY VARCHAR(50) NOT NULL,"
+                + "  CONSTRAINT UK_CODE_CATEGORY UNIQUE (CODE, CATEGORY)"
+                + ")"
+            );
+        }
+
+        File outputDir = tempDir.newFolder("generated_uk");
+
+        Configuration config = GspEntityGenerationConfig.create(
+            JDBC_URL, JDBC_USER, JDBC_PASSWORD, JDBC_DRIVER,
+            SCHEMA, "jp.co.tis.gsptest", "entity",
+            outputDir, "jpa",
+            "(SCHEMA_INFO|.*\\$.*)", false
+        );
+
+        try {
+            GenerationTool.generate(config);
+
+            File entityDir = new File(outputDir, "jp/co/tis/gsptest/entity");
+            File uniqueTest = new File(entityDir, "UniqueTest.java");
+            assertTrue("UniqueTest.java が生成される", uniqueTest.exists());
+
+            String content = Files.readString(uniqueTest.toPath());
+            assertTrue("@UniqueConstraintインポート",
+                content.contains("import jakarta.persistence.UniqueConstraint;"));
+            assertTrue("@UniqueConstraintアノテーション",
+                content.contains("@UniqueConstraint(columnNames = {"));
+            assertTrue("CODE列名を含む", content.contains("\"CODE\""));
+            assertTrue("CATEGORY列名を含む", content.contains("\"CATEGORY\""));
+        } finally {
+            GspEntityGenerationConfig.clearParams();
+        }
     }
 }

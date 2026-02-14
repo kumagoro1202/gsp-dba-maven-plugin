@@ -90,6 +90,7 @@ public class GspEntityGenerationConfig {
     public static void clearParams() {
         CURRENT_PARAMS.remove();
         GspViewSupport.clear();
+        GspRelationSupport.clear();
     }
 
     private GspEntityGenerationConfig() {
@@ -129,6 +130,9 @@ public class GspEntityGenerationConfig {
 
         // VIEW解析（PKの推定）
         GspViewSupport.analyzeViews(jdbcUrl, jdbcUser, jdbcPassword, schemaName);
+
+        // FK/UniqueConstraint解析（JDBC DatabaseMetaData直接アクセス）
+        GspRelationSupport.analyzeRelations(jdbcUrl, jdbcUser, jdbcPassword, schemaName);
 
         return buildConfiguration(jdbcUrl, jdbcUser, jdbcPassword, jdbcDriver,
                 schemaName, rootPackage, entityPackageName,
