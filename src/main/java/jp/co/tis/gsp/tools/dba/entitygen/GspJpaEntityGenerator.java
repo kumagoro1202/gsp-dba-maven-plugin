@@ -506,7 +506,8 @@ public class GspJpaEntityGenerator extends JavaGenerator {
         if (userType != null && !userType.isEmpty()) {
             return userType;
         }
-        return GspColumnTypeMapper.getJavaType(type);
+        boolean useJSR310 = GspEntityGenerationConfig.getParams().isUseJSR310();
+        return GspColumnTypeMapper.getJavaType(type, useJSR310);
     }
 
     /**

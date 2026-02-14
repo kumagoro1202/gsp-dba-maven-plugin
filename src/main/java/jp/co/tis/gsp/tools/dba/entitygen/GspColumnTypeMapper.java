@@ -123,7 +123,28 @@ public class GspColumnTypeMapper {
      * @return Java型のFQCN
      */
     public static String getJavaType(DataTypeDefinition type) {
+        return getJavaType(type, false);
+    }
+
+    /**
+     * DataTypeDefinitionからJava型のFQCNを解決する（JSR310モード対応）。
+     *
+     * @param type データ型定義
+     * @param useJSR310 JSR310（java.time.*）を使用するか
+     * @return Java型のFQCN
+     */
+    public static String getJavaType(DataTypeDefinition type, boolean useJSR310) {
         String typeName = type.getType().toUpperCase();
+
+        // JSR310モード: 日付・時刻型をjava.time.*にマッピング
+        if (useJSR310) {
+            if ("DATE".equals(typeName)) return "java.time.LocalDate";
+            if ("TIME".equals(typeName)) return "java.time.LocalTime";
+            if (typeName.startsWith("TIMESTAMP") || "DATETIME".equals(typeName)
+                    || "SMALLDATETIME".equals(typeName)) {
+                return "java.time.LocalDateTime";
+            }
+        }
 
         Function<DataTypeDefinition, String> mapper = TYPE_MAP.get(typeName);
         if (mapper != null) {
@@ -132,7 +153,7 @@ public class GspColumnTypeMapper {
 
         // デフォルト: TIMESTAMP接頭辞の変種（TIMESTAMP WITH TIME ZONEなど）を処理
         if (typeName.startsWith("TIMESTAMP")) {
-            return "java.sql.Timestamp";
+            return useJSR310 ? "java.time.LocalDateTime" : "java.sql.Timestamp";
         }
         return "java.lang.String";
     }

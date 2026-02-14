@@ -44,16 +44,20 @@ public class GspEntityGenerationConfig {
         private final boolean useAccessor;
         private final int allocationSize;
         private final String versionColumnNamePattern;
+        private final boolean useJSR310;
 
         /**
          * @param useAccessor アクセサ（getter/setter）を生成するか
          * @param allocationSize {@code @SequenceGenerator}のallocationSize
          * @param versionColumnNamePattern {@code @Version}付与対象カラム名パターン（正規表現）
+         * @param useJSR310 JSR310（java.time.*）を使用するか
          */
-        public EntityGenParams(boolean useAccessor, int allocationSize, String versionColumnNamePattern) {
+        public EntityGenParams(boolean useAccessor, int allocationSize,
+                                String versionColumnNamePattern, boolean useJSR310) {
             this.useAccessor = useAccessor;
             this.allocationSize = allocationSize;
             this.versionColumnNamePattern = versionColumnNamePattern;
+            this.useJSR310 = useJSR310;
         }
 
         /** アクセサ（getter/setter）を生成するか */
@@ -64,10 +68,13 @@ public class GspEntityGenerationConfig {
 
         /** {@code @Version}アノテーション付与対象のカラム名パターン（正規表現） */
         public String getVersionColumnNamePattern() { return versionColumnNamePattern; }
+
+        /** JSR310（java.time.*）を使用するか */
+        public boolean isUseJSR310() { return useJSR310; }
     }
 
-    /** デフォルトパラメータ（useAccessor=false, allocationSize=1, versionColumnNamePattern=null） */
-    private static final EntityGenParams DEFAULT_PARAMS = new EntityGenParams(false, 1, null);
+    /** デフォルトパラメータ */
+    private static final EntityGenParams DEFAULT_PARAMS = new EntityGenParams(false, 1, null, false);
 
     /** Generator向けパラメータ受け渡し用ThreadLocal */
     private static final ThreadLocal<EntityGenParams> CURRENT_PARAMS = new ThreadLocal<>();
@@ -126,7 +133,7 @@ public class GspEntityGenerationConfig {
             boolean useAccessor, int allocationSize, String versionColumnNamePattern) {
 
         // Generator向けパラメータをThreadLocalに設定
-        CURRENT_PARAMS.set(new EntityGenParams(useAccessor, allocationSize, versionColumnNamePattern));
+        CURRENT_PARAMS.set(new EntityGenParams(useAccessor, allocationSize, versionColumnNamePattern, useJSR310));
 
         // VIEW解析（PKの推定）
         GspViewSupport.analyzeViews(jdbcUrl, jdbcUser, jdbcPassword, schemaName);
