@@ -175,7 +175,12 @@ public class GspEntityGenerationConfig {
             File javaFileDestDir, String entityType,
             String ignoreTableNamePattern, boolean useJSR310) {
 
-        String generatorClassName = GspJpaEntityGenerator.class.getName();
+        String generatorClassName;
+        if ("doma".equalsIgnoreCase(entityType)) {
+            generatorClassName = GspDomaEntityGenerator.class.getName();
+        } else {
+            generatorClassName = GspJpaEntityGenerator.class.getName();
+        }
 
         String targetPackage = rootPackage;
         if (entityPackageName != null && !entityPackageName.isEmpty()) {
