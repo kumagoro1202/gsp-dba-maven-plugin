@@ -17,45 +17,22 @@
 package jp.co.tis.gsp.tools.dba.mojo;
 
 import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 
-import freemarker.core.XMLOutputFormat;
-import jp.co.tis.gsp.tools.db.beans.Erd;
-import jp.co.tis.gsp.tools.dba.dialect.Dialect;
-import jp.co.tis.gsp.tools.dba.dialect.DialectFactory;
-import jp.co.tis.gsp.tools.dba.s2jdbc.gen.DomaGspFactoryImpl;
-import jp.co.tis.gsp.tools.dba.s2jdbc.gen.GspFactoryImpl;
-import jp.co.tis.gsp.tools.dba.util.DialectUtil;
+import jp.co.tis.gsp.tools.dba.entitygen.GspEntityGenerationConfig;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.seasar.extension.jdbc.gen.command.CommandInvoker;
-import org.seasar.extension.jdbc.gen.internal.command.CommandInvokerImpl;
-import org.seasar.extension.jdbc.gen.internal.util.ReflectUtil;
-
-import freemarker.cache.ClassTemplateLoader;
-import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateException;
+import org.jooq.codegen.GenerationTool;
+import org.jooq.meta.jaxb.Configuration;
 
 /**
  * generate-entity.
- * 
+ *
  * 指定したスキーマを解析し、Entityクラスを生成する。
- * 
+ * jOOQ Code Generationを使用してJPA/Doma Entityを生成する。
+ *
  * @author kawasima
  */
 @Mojo(name = "generate-entity")
@@ -63,20 +40,20 @@ public class GenerateEntity extends AbstractDbaMojo {
 
     /**
      * dicon directory.
-     * @deprecated S2JDBC-Gen依存のため非推奨。jOOQベースのEntity生成では使用しない。
+     * @deprecated jOOQベースのEntity生成では使用しない。後方互換性のため残置。
      */
     @Deprecated
     @Parameter(defaultValue = "target/classes")
     protected File diconDir;
 
     /**
-     * table name pattern.
+     * 無視するテーブル名パターン（正規表現）。
      */
     @Parameter(defaultValue = "(SCHEMA_INFO|.*\\$.*)")
     protected String ignoreTableNamePattern;
 
     /**
-     * entity package name.
+     * エンティティパッケージ名。
      */
     @Parameter(defaultValue = "entity")
     protected String entityPackageName;
@@ -98,168 +75,89 @@ public class GenerateEntity extends AbstractDbaMojo {
     protected String dialectClassName;
 
     /**
-     * root package.
+     * ルートパッケージ。
      */
     @Parameter(required = true)
     protected String rootPackage;
 
     /**
-     * use accessor?
+     * アクセサ（getter/setter）を生成するか。
+     * false（デフォルト）: publicフィールド、true: privateフィールド + getter/setter。
      */
     @Parameter(defaultValue = "false")
     protected Boolean useAccessor;
 
     /**
-     * destination directory where java files are generated.
+     * Entity Javaファイルの出力先ディレクトリ。
      */
     @Parameter(defaultValue = "target/generated-sources/entity/")
     protected File javaFileDestDir;
 
     /**
-     * path of entity template file from &quot;org/seasar/extension/jdbc/gen/internal/generator/tempaltes&quot;. <br/>
+     * entity template file.
+     * @deprecated jOOQベースのEntity生成ではFreeMarkerテンプレートは使用しない。
      */
+    @Deprecated
     @Parameter(defaultValue = "java/gsp_entity.ftl")
     protected String entityTemplate;
 
     /**
-     * primary directory where template files are put.
-     * if null, default directory will be used (see link below).
-     * @see org.seasar.extension.jdbc.gen.internal.generator.GeneratorImpl#DEFAULT_TEMPLATE_DIR_NAME
+     * template primary directory.
+     * @deprecated jOOQベースのEntity生成ではFreeMarkerテンプレートは使用しない。
      */
+    @Deprecated
     @Parameter
     protected File templateFilePrimaryDir = null;
 
+    /**
+     * {@code @SequenceGenerator}のallocationSize。
+     */
     @Parameter(defaultValue = "1")
     protected int allocationSize;
 
+    /**
+     * エンティティ種別。"jpa"（デフォルト）または"doma"。
+     */
     @Parameter(defaultValue = "jpa")
     protected String entityType;
-    
+
+    /**
+     * {@code @Version}付与対象カラム名パターン（正規表現）。
+     */
     @Parameter
     protected String versionColumnNamePattern;
 
     /**
-     * use JSR310.
+     * JSR310（java.time.*）を使用するか。
+     * true: DATE→LocalDate, TIMESTAMP→LocalDateTime。
      */
     @Parameter(defaultValue = "false")
     private Boolean useJSR310;
 
-    /** 実行時に生成するdiconのテンプレート名 */
-    private static final String[] templateNames = {"convention", "jdbc", "s2jdbc"};
-
-
     /**
-     * S2JDBC-GENを使ってEntityクラスを生成する。
-     * Entityプロジェクトにはdiconがないので、自動生成する。
+     * jOOQ Code Generationを使用してEntityクラスを生成する。
      */
     @Override
-	protected void executeMojoSpec() throws MojoExecutionException, MojoFailureException {
+    protected void executeMojoSpec() throws MojoExecutionException, MojoFailureException {
         // 非推奨パラメータの警告
         warnDeprecatedParameters();
 
-        Configuration fmConfig = new Configuration(Configuration.VERSION_2_3_31);
-        fmConfig.setTemplateLoader(new ClassTemplateLoader(Erd.class, "/jp/co/tis/gsp/tools/dba/template/dicon"));
-        fmConfig.setOutputFormat(XMLOutputFormat.INSTANCE);
-        Map<String, Object> param = new HashMap<String, Object>();
-        param.put("driver", driver);
-        param.put("url", url);
-        param.put("user", adminUser);
-        /* NULLがfreemarkerに渡るとInvalidReferenceExceptionになるが、
-           Mojoのparameterは空要素をNULLと認識するため、ここで空文字に変換する */
-        param.put("password", (adminPassword == null) ? "" : adminPassword);
-        param.put("rootPackage", rootPackage);
-
-        String[] urlTokens = StringUtils.split(url, ':');
-        if(urlTokens.length < 3) {
-            throw new MojoExecutionException("Invalid url:" + url);
-        }
-        String databaseProduct = StringUtils.capitalize(urlTokens[1]);
-        if ("Postgresql".equals(databaseProduct)) {
-            databaseProduct = "Postgre";
-        } else if ("Sqlserver".equals(databaseProduct)) {
-            databaseProduct = "Mssql";
-        }
-        String dialectClass = this.dialectClassName != null ? dialectClassName
-                : "org.seasar.extension.jdbc.dialect." + databaseProduct + "Dialect";
-        if(Objects.equals(databaseProduct, "Solr")) {
-            dialectClass = "net.unit8.solr.jdbc.extension.s2jdbc.dialect.SolrDialect";
-        }
-        param.put("databaseProduct", databaseProduct);
-        param.put("dialectClass", dialectClass);
+        String jdbcPassword = (adminPassword == null) ? "" : adminPassword;
 
         try {
-            if (!diconDir.exists())
-                FileUtils.forceMkdir(diconDir);
-            for (String templateName : templateNames) {
-                Template template = fmConfig.getTemplate(templateName + ".dicon.ftl");
-                template.process(param, new FileWriter(
-                        new File(diconDir, templateName + ".dicon")
-                ));
-            }
-        } catch (IOException e) {
-            throw new MojoExecutionException("Can't generate dicon file.", e);
-        } catch (TemplateException e) {
-            throw new MojoExecutionException("Can't generate dicon file.", e);
-        }
+            Configuration config = GspEntityGenerationConfig.create(
+                url, adminUser, jdbcPassword, driver,
+                schema, rootPackage, entityPackageName,
+                javaFileDestDir, entityType,
+                ignoreTableNamePattern, useJSR310,
+                useAccessor, allocationSize, versionColumnNamePattern
+            );
 
-        executeGenerateEntity();
-    }
-
-    /**
-     * エンティティ生成を実行する。
-     */
-    private void executeGenerateEntity() {
-        Dialect dialect = DialectFactory.getDialect(url, driver);
-        DialectUtil.setDialect(dialect);
-        final ExtendedGenerateEntityCommand command = new ExtendedGenerateEntityCommand();
-        command.setSchemaName(schema);
-        command.setOverwrite(true);
-        command.setApplyDbCommentToJava(true);
-        command.setEntityPackageName(entityPackageName);
-        command.setIgnoreTableNamePattern(ignoreTableNamePattern);
-        command.setEntityTemplateFileName(entityTemplate);
-        command.setGenDialectClassName(genDialectClassName);
-        command.setShowTableName(true);
-        if(!user.equals(schema)){
-            command.setShowSchemaName(true);
-        }
-        command.setGenerationType(dialect.getGenerationType());
-        command.setUseJSR310(useJSR310);
-        if ("doma".equals(entityType)) {
-            command.setFactoryClassName(DomaGspFactoryImpl.class.getName());
-        } else {
-            command.setFactoryClassName(GspFactoryImpl.class.getName());
-        }
-        command.setUseAccessor(useAccessor);
-        command.setShowColumnName(true);
-        command.setJavaFileDestDir(javaFileDestDir);
-        command.setTemplateFilePrimaryDir(templateFilePrimaryDir);
-        command.setAllocationSize(allocationSize);
-
-        if (versionColumnNamePattern != null && !versionColumnNamePattern.isBlank()) {
-          command.setVersionColumnNamePattern(versionColumnNamePattern);
-        }
-
-        final List<URL> urlList = new ArrayList<URL>();
-        try {
-            urlList.add(diconDir.toURI().toURL());
-        } catch (MalformedURLException e) {
-            throw new IllegalArgumentException("URL(" + diconDir + ") が誤っている可能性があります。", e);
-        }
-
-        final ClassLoader oldLoader = Thread.currentThread().getContextClassLoader();
-        final URLClassLoader newLoader = new URLClassLoader(urlList.toArray(new URL[urlList.size()]),
-                                                            oldLoader);
-        try {
-            Thread.currentThread().setContextClassLoader(newLoader);
-
-            command.setRootPackageName(rootPackage);
-
-            final CommandInvoker invoker = ReflectUtil.newInstance(CommandInvoker.class,
-                                                                   CommandInvokerImpl.class.getName());
-            invoker.invoke(command);
+            GenerationTool.generate(config);
+        } catch (Exception e) {
+            throw new MojoExecutionException("Entity generation failed.", e);
         } finally {
-            Thread.currentThread().setContextClassLoader(oldLoader);
+            GspEntityGenerationConfig.clearParams();
         }
     }
 
@@ -275,6 +173,13 @@ public class GenerateEntity extends AbstractDbaMojo {
             getLog().warn("Parameter 'dialectClassName' is deprecated and will be ignored. "
                     + "jOOQ handles dialect automatically.");
         }
+        if (entityTemplate != null && !"java/gsp_entity.ftl".equals(entityTemplate)) {
+            getLog().warn("Parameter 'entityTemplate' is deprecated. "
+                    + "jOOQ-based entity generation does not use FreeMarker templates.");
+        }
+        if (templateFilePrimaryDir != null) {
+            getLog().warn("Parameter 'templateFilePrimaryDir' is deprecated. "
+                    + "jOOQ-based entity generation does not use FreeMarker templates.");
+        }
     }
-
 }
