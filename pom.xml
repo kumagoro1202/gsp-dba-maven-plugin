@@ -46,6 +46,7 @@
         <jacoco.ut.execution.data.file>${project.build.directory}/coverage-reports/jacoco-ut.exec</jacoco.ut.execution.data.file>
         <builtByUser>${user.name}</builtByUser>
         <jakarta-xml-binding.ci.version>4.0.1</jakarta-xml-binding.ci.version>
+        <jooq.version>3.19.22</jooq.version>
     </properties>
 
     <prerequisites>
@@ -257,6 +258,18 @@
             <artifactId>s2jdbc-gen</artifactId>
             <version>${seasarVersion}</version>
         </dependency>
+        <!-- jOOQ Code Generation（OSS版）- S2JDBC-Gen代替 -->
+        <dependency>
+            <groupId>org.jooq</groupId>
+            <artifactId>jooq-codegen</artifactId>
+            <version>${jooq.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jooq</groupId>
+            <artifactId>jooq-meta</artifactId>
+            <version>${jooq.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.freemarker</groupId>
             <artifactId>freemarker</artifactId>
