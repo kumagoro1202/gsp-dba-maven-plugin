@@ -19,8 +19,6 @@ import java.util.List;
 import org.apache.commons.io.IOUtils;
 import org.apache.maven.plugin.logging.Log;
 import org.codehaus.mojo.sql.SqlSplitter;
-import org.seasar.extension.jdbc.util.ConnectionUtil;
-import org.seasar.framework.util.StatementUtil;
 
 public class SqlExecutor {
 
@@ -84,7 +82,7 @@ public class SqlExecutor {
         }
 
         // コネクション解放
-        ConnectionUtil.close(conn);
+        if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
 
     }
 
@@ -101,7 +99,7 @@ public class SqlExecutor {
         } catch (SQLException ex) {
             throw new SQLException(sql, ex);
         } finally {
-            StatementUtil.close(stmt);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
 

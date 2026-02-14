@@ -19,11 +19,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
-import org.seasar.extension.jdbc.util.ConnectionUtil;
-import org.seasar.framework.util.DriverManagerUtil;
-import org.seasar.framework.util.OutputStreamUtil;
-import org.seasar.framework.util.ResultSetUtil;
-import org.seasar.framework.util.StatementUtil;
 
 import com.csvreader.CsvWriter;
 
@@ -75,7 +70,11 @@ public class CsvExporter {
      */
     protected void exportCsv(String url, String adminUser, String adminPassword, String schema, File outputDir,
             Charset charset) throws SQLException, IOException {
-        DriverManagerUtil.registerDriver(driver);
+        try {
+            Class.forName(driver);
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("JDBCドライバが見つかりません: " + driver, e);
+        }
         Connection conn = null;
         try {
             conn = DriverManager.getConnection(url, adminUser, adminPassword);
@@ -91,7 +90,7 @@ public class CsvExporter {
         } catch (IOException e) {
             throw new IOException("CSVファイルの出力中にエラーが発生しました。", e);
         } finally {
-            ConnectionUtil.close(conn);
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -188,9 +187,9 @@ public class CsvExporter {
             csvWriter.flush();
             csvWriter.close();
 
-            ResultSetUtil.close(resultSet);
-            StatementUtil.close(stmt);
-            OutputStreamUtil.close(out);
+            if (resultSet != null) { try { resultSet.close(); } catch (SQLException ignore) {} }
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+            if (out != null) { try { out.close(); } catch (IOException ignore) {} }
         }
     }
 

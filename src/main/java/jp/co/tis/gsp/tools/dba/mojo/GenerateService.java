@@ -24,8 +24,6 @@ import org.seasar.extension.jdbc.gen.internal.command.CommandInvokerImpl;
 import org.seasar.extension.jdbc.gen.internal.command.GenerateNamesCommand;
 import org.seasar.extension.jdbc.gen.internal.command.GenerateServiceCommand;
 import org.seasar.extension.jdbc.gen.internal.util.ReflectUtil;
-import org.seasar.framework.util.ClassUtil;
-import org.seasar.framework.util.MethodUtil;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -104,19 +102,17 @@ public class GenerateService extends AbstractDbaMojo {
             Thread.currentThread().setContextClassLoader(newLoader);
 
             command.setRootPackageName(rootPackage);
-            Method init = ClassUtil.getDeclaredMethod(
-                    AbstractCommand.class,
-                    "init",
-                    null);
-            init.setAccessible(true);
-            MethodUtil.invoke(init, command, null);
+            try {
+                Method init = AbstractCommand.class.getDeclaredMethod("init");
+                init.setAccessible(true);
+                init.invoke(command);
 
-            Method generateAbstractService = ClassUtil.getDeclaredMethod(
-                    GenerateServiceCommand.class,
-                    "generateAbstractService",
-                    null);
-            generateAbstractService.setAccessible(true);
-            MethodUtil.invoke(generateAbstractService, command, null);
+                Method generateAbstractService = GenerateServiceCommand.class.getDeclaredMethod("generateAbstractService");
+                generateAbstractService.setAccessible(true);
+                generateAbstractService.invoke(command);
+            } catch (ReflectiveOperationException e) {
+                throw new RuntimeException(e);
+            }
         } finally {
             Thread.currentThread().setContextClassLoader(oldLoader);
         }

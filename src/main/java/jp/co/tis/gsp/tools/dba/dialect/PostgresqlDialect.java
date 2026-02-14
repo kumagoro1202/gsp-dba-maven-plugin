@@ -35,10 +35,6 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
-import org.seasar.extension.jdbc.util.ConnectionUtil;
-import org.seasar.framework.util.FileOutputStreamUtil;
-import org.seasar.framework.util.ResultSetUtil;
-import org.seasar.framework.util.StatementUtil;
 
 import jp.co.tis.gsp.tools.db.TypeMapper;
 import jp.co.tis.gsp.tools.dba.dialect.param.ExportParams;
@@ -104,7 +100,7 @@ public class PostgresqlDialect extends Dialect {
             Process process = pb.start();
             in = new BufferedInputStream(process.getInputStream());
 
-            out = FileOutputStreamUtil.create(dumpFile);
+            out = new FileOutputStream(dumpFile);
             byte[] buf = new byte[4096];
             while(true) {
                 int res = in.read(buf);
@@ -155,8 +151,8 @@ public class PostgresqlDialect extends Dialect {
         } catch (SQLException e) {
             throw new MojoExecutionException("データ削除中にエラー", e);
         } finally {
-            ConnectionUtil.close(conn);
-            StatementUtil.close(stmt);
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
     
@@ -171,8 +167,8 @@ public class PostgresqlDialect extends Dialect {
             rs.next();
             return (rs.getInt("num") > 0);
         } finally {
-            ResultSetUtil.close(rs);
-            StatementUtil.close(stmt);
+            if (rs != null) { try { rs.close(); } catch (SQLException ignore) {} }
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -227,8 +223,8 @@ public class PostgresqlDialect extends Dialect {
         } catch (SQLException e) {
             throw new MojoExecutionException("CREATE USER実行中にエラー", e);
         } finally {
-            StatementUtil.close(stmt);
-            ConnectionUtil.close(conn);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -294,8 +290,8 @@ public class PostgresqlDialect extends Dialect {
             rs.next();
             return (rs.getInt("num") > 0);
         } finally {
-            ResultSetUtil.close(rs);
-            StatementUtil.close(stmt);
+            if (rs != null) { try { rs.close(); } catch (SQLException ignore) {} }
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
 }

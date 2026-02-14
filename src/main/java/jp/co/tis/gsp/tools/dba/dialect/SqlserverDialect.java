@@ -31,9 +31,6 @@ import java.util.List;
 import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
-import org.seasar.extension.jdbc.util.ConnectionUtil;
-import org.seasar.framework.util.StatementUtil;
-import org.seasar.framework.util.StringUtil;
 
 import jp.co.tis.gsp.tools.db.EntityDependencyParser;
 import jp.co.tis.gsp.tools.db.TypeMapper;
@@ -138,8 +135,8 @@ public class SqlserverDialect extends Dialect {
         } catch (SQLException e) {
             throw new MojoExecutionException("データ削除中にエラー", e);
         } finally {
-            StatementUtil.close(stmt);
-            ConnectionUtil.close(conn);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -161,8 +158,8 @@ public class SqlserverDialect extends Dialect {
         } catch (SQLException e) {
             throw new MojoExecutionException("CREATE USER実行中にエラー", e);
         } finally {
-            StatementUtil.close(stmt);
-            ConnectionUtil.close(conn);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -195,14 +192,14 @@ public class SqlserverDialect extends Dialect {
             stmt = conn.prepareStatement("SELECT COUNT(*) AS num FROM syslogins WHERE name = ?");
             stmt.setString(1, user);
             existLogin = exists(stmt.executeQuery());
-            ConnectionUtil.close(conn);
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
             conn = DriverManager.getConnection(url, adminUser, adminPassword);
             stmt = conn.prepareStatement("SELECT COUNT(*) AS num FROM sysusers WHERE name = ?");
             stmt.setString(1, user);
             existUser = exists(stmt.executeQuery());
         } finally {
-            StatementUtil.close(stmt);
-            ConnectionUtil.close(conn);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
         return (existLogin && existUser);
     }
@@ -221,7 +218,7 @@ public class SqlserverDialect extends Dialect {
             rs.getInt("id");
             return (!rs.wasNull());
         } finally {
-            StatementUtil.close(stmt);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -254,7 +251,7 @@ public class SqlserverDialect extends Dialect {
         } catch (SQLException e) {
             throw e;
         } finally {
-            StatementUtil.close(stmt);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -271,7 +268,7 @@ public class SqlserverDialect extends Dialect {
     public void setObjectInStmt(PreparedStatement stmt, int parameterIndex, String value, int sqlType) throws SQLException {
         if(sqlType == UN_USABLE_TYPE) {
             stmt.setNull(parameterIndex, Types.NULL);
-        } else if(StringUtil.isBlank(value) || "　".equals(value)) {
+        } else if(value == null || value.isBlank() || "　".equals(value)) {
             stmt.setNull(parameterIndex, sqlType);
         } else if(sqlType == Types.TIME) {
             stmt.setTimestamp(parameterIndex, Timestamp.valueOf("1970-01-01 " + value));

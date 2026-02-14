@@ -35,10 +35,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.seasar.extension.jdbc.gen.meta.DbTableMeta;
-import org.seasar.framework.util.DriverManagerUtil;
-import org.seasar.framework.util.ResultSetUtil;
-import org.seasar.framework.util.StatementUtil;
-import org.seasar.framework.util.StringUtil;
 
 import jp.co.tis.gsp.tools.db.AlternativeGenerator;
 import jp.co.tis.gsp.tools.db.TypeMapper;
@@ -174,7 +170,11 @@ public abstract class Dialect {
     }
     
 	public void setDriver(String driver) {
-		DriverManagerUtil.registerDriver(driver);
+		try {
+			Class.forName(driver);
+		} catch (ClassNotFoundException e) {
+			throw new RuntimeException("JDBCドライバが見つかりません: " + driver, e);
+		}
 		this.driver = driver;
 	}
 
@@ -284,13 +284,13 @@ public abstract class Dialect {
     public void setObjectInStmt(PreparedStatement stmt, int parameterIndex, String value, int sqlType) throws SQLException {
         if(sqlType == UN_USABLE_TYPE) {
             stmt.setNull(parameterIndex, Types.NULL);
-        } else if(StringUtil.isBlank(value) || "　".equals(value)) {
+        } else if(value == null || value.isBlank() || "　".equals(value)) {
             stmt.setNull(parameterIndex, sqlType);
         } else {
             stmt.setObject(parameterIndex, value, sqlType);
         }
     }
-    
+
     /**
      * ViewのDDL定義を取得する。
      * 
@@ -320,8 +320,8 @@ public abstract class Dialect {
                 return rs.getString(1);
             }
         } finally {
-            ResultSetUtil.close(rs);
-            StatementUtil.close(stmt);
+            if (rs != null) { try { rs.close(); } catch (SQLException ignore) {} }
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
         return null;
     }
@@ -356,10 +356,10 @@ public abstract class Dialect {
       	    stmt.execute(dropSql);
     	  }
         } finally {
-            StatementUtil.close(stmt);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
-    
+
     protected void grantSchemaObjToUser(Connection conn, String grantListSql, String schema, String user, OBJECT_TYPE objType) throws SQLException {
     	Statement stmt = null;
     	ResultSet rs = null;
@@ -389,7 +389,7 @@ public abstract class Dialect {
       	    stmt.execute(grantSql);
     	  }
         } finally {
-            StatementUtil.close(stmt);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
     

@@ -30,6 +30,7 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -40,10 +41,6 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
-import org.seasar.extension.jdbc.util.ConnectionUtil;
-import org.seasar.framework.util.StatementUtil;
-import org.seasar.framework.util.StringUtil;
-import org.seasar.framework.util.tiger.Maps;
 
 import jp.co.tis.gsp.tools.db.TypeMapper;
 import jp.co.tis.gsp.tools.dba.dialect.param.ExportParams;
@@ -65,20 +62,20 @@ public class OracleDialect extends Dialect {
 		USABLE_TYPE_NAMES.add("VARCHAR2");
 	}
 
-	private Map<Integer, String> typeToNameMap = Maps
-			.map(Types.BIGINT, "NUMBER(18,0)")
-			.$(Types.BLOB, "BLOB")
-			.$(Types.BOOLEAN, "NUMBER(1,0)")
-			.$(Types.CHAR, "CHAR")
-			.$(Types.CLOB, "CLOB")
-			.$(Types.DATE, "DATE")
-			.$(Types.DECIMAL, "NUMBER")
-			.$(Types.DOUBLE, "DOUBLE")
-			.$(Types.FLOAT, "FLOAT")
-			.$(Types.INTEGER, "NUMBER(9,0)")
-			.$(Types.TIMESTAMP, "TIMESTAMP")
-			.$(Types.VARCHAR, "VARCHAR2")
-			.$();
+	private Map<Integer, String> typeToNameMap = new HashMap<>(Map.ofEntries(
+			Map.entry(Types.BIGINT, "NUMBER(18,0)"),
+			Map.entry(Types.BLOB, "BLOB"),
+			Map.entry(Types.BOOLEAN, "NUMBER(1,0)"),
+			Map.entry(Types.CHAR, "CHAR"),
+			Map.entry(Types.CLOB, "CLOB"),
+			Map.entry(Types.DATE, "DATE"),
+			Map.entry(Types.DECIMAL, "NUMBER"),
+			Map.entry(Types.DOUBLE, "DOUBLE"),
+			Map.entry(Types.FLOAT, "FLOAT"),
+			Map.entry(Types.INTEGER, "NUMBER(9,0)"),
+			Map.entry(Types.TIMESTAMP, "TIMESTAMP"),
+			Map.entry(Types.VARCHAR, "VARCHAR2")
+	));
 
     public OracleDialect() {
         GenDialectRegistry.deregister(
@@ -98,8 +95,8 @@ public class OracleDialect extends Dialect {
             stmt = conn.createStatement();
             stmt.execute("CREATE OR REPLACE DIRECTORY exp_dir as '" + directory.getAbsolutePath() + "'");
         } finally {
-            StatementUtil.close(stmt);
-            ConnectionUtil.close(conn);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -232,8 +229,8 @@ public class OracleDialect extends Dialect {
 		} catch (SQLException e) {
 			throw new MojoExecutionException("CREATE USER実行中にエラー", e);
 		} finally {
-			StatementUtil.close(stmt);
-			ConnectionUtil.close(conn);
+			if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+			if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
 		}
 	}
 
@@ -247,7 +244,7 @@ public class OracleDialect extends Dialect {
 			rs.next();
 			return (rs.getInt("num") > 0);
 		} finally {
-			StatementUtil.close(stmt);
+			if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
 		}
 	}
 
@@ -275,7 +272,7 @@ public class OracleDialect extends Dialect {
 		} catch (SQLException e) {
 			throw new MojoExecutionException("データ削除中にエラー", e);
 		} finally{
-			ConnectionUtil.close(conn);
+			if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
 		}
 	}
 
@@ -291,7 +288,7 @@ public class OracleDialect extends Dialect {
 		} catch (SQLException e) {
 			throw e;
 		} finally {
-			StatementUtil.close(stmt);
+			if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
 		}
 	}
 
@@ -330,7 +327,7 @@ public class OracleDialect extends Dialect {
 	public void setObjectInStmt(PreparedStatement stmt, int parameterIndex, String value, int sqlType) throws SQLException {
 		if(sqlType == UN_USABLE_TYPE) {
 			stmt.setNull(parameterIndex, Types.NULL);
-		} else if(StringUtil.isBlank(value) || "　".equals(value)) {
+		} else if(value == null || value.isBlank() || "　".equals(value)) {
 			stmt.setNull(parameterIndex, sqlType);
 		} else {
 			stmt.setObject(parameterIndex, value);
@@ -439,9 +436,9 @@ public class OracleDialect extends Dialect {
 		} catch (SQLException e) {
 			throw new MojoExecutionException("Drop Object実行中にエラー", e);
 		} finally {
-			StatementUtil.close(stmtMeta);
-			StatementUtil.close(stmt);
-			ConnectionUtil.close(conn);
+			if (stmtMeta != null) { try { stmtMeta.close(); } catch (SQLException ignore) {} }
+			if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+			if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
 		}
     }
     
@@ -476,9 +473,9 @@ public class OracleDialect extends Dialect {
 		} catch (SQLException e) {
 			throw new MojoExecutionException("データ削除中にエラー", e);
 		} finally {
-			StatementUtil.close(stmtMeta);
-			StatementUtil.close(stmt);
-			ConnectionUtil.close(conn);
+			if (stmtMeta != null) { try { stmtMeta.close(); } catch (SQLException ignore) {} }
+			if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+			if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
 		}
 	}
 

@@ -36,8 +36,6 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.repository.RepositorySystem;
-import org.seasar.framework.util.JarFileUtil;
-
 import jp.co.tis.gsp.tools.dba.dialect.Dialect;
 import jp.co.tis.gsp.tools.dba.dialect.DialectFactory;
 import jp.co.tis.gsp.tools.dba.dialect.param.ImportParams;
@@ -97,8 +95,13 @@ public class ImportSchemaMojo extends AbstractDbaMojo {
 
         ImportParams params = createImportParams();
 
-        JarFile jarFile = JarFileUtil.create(new File(localRepository.getBasedir(),
-                localRepository.pathOf(artifact)));
+        JarFile jarFile;
+        try {
+            jarFile = new JarFile(new File(localRepository.getBasedir(),
+                    localRepository.pathOf(artifact)));
+        } catch (IOException e) {
+            throw new MojoExecutionException("JARファイルのオープンに失敗しました", e);
+        }
 
         try {
             

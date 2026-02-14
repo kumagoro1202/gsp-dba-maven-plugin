@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import freemarker.core.XMLOutputFormat;
 import jp.co.tis.gsp.tools.db.beans.Erd;
@@ -44,7 +45,6 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.seasar.extension.jdbc.gen.command.CommandInvoker;
 import org.seasar.extension.jdbc.gen.internal.command.CommandInvokerImpl;
 import org.seasar.extension.jdbc.gen.internal.util.ReflectUtil;
-import org.seasar.framework.util.StringUtil;
 
 import freemarker.cache.ClassTemplateLoader;
 import freemarker.template.Configuration;
@@ -172,7 +172,7 @@ public class GenerateEntity extends AbstractDbaMojo {
         }
         String dialectClass = this.dialectClassName != null ? dialectClassName
                 : "org.seasar.extension.jdbc.dialect." + databaseProduct + "Dialect";
-        if(StringUtil.equals(databaseProduct, "Solr")) {
+        if(Objects.equals(databaseProduct, "Solr")) {
             dialectClass = "net.unit8.solr.jdbc.extension.s2jdbc.dialect.SolrDialect";
         }
         param.put("databaseProduct", databaseProduct);
@@ -227,7 +227,7 @@ public class GenerateEntity extends AbstractDbaMojo {
         command.setTemplateFilePrimaryDir(templateFilePrimaryDir);
         command.setAllocationSize(allocationSize);
 
-        if (!StringUtil.isBlank(versionColumnNamePattern)) {
+        if (versionColumnNamePattern != null && !versionColumnNamePattern.isBlank()) {
           command.setVersionColumnNamePattern(versionColumnNamePattern);
         }
 

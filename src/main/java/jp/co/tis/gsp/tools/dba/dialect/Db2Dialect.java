@@ -28,8 +28,6 @@ import java.util.List;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.codehaus.plexus.util.StringUtils;
 import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
-import org.seasar.extension.jdbc.util.ConnectionUtil;
-import org.seasar.framework.util.StatementUtil;
 
 import jp.co.tis.gsp.tools.db.TypeMapper;
 
@@ -99,8 +97,8 @@ public class Db2Dialect extends Dialect {
         } catch (SQLException e) {
             throw new MojoExecutionException("データ削除中にエラー", e);
         } finally {
-            StatementUtil.close(stmt);
-            ConnectionUtil.close(conn);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
     
@@ -113,7 +111,7 @@ public class Db2Dialect extends Dialect {
             rs.next();
             return (rs.getInt("num") > 0);
         } finally {
-            StatementUtil.close(stmt);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -130,7 +128,7 @@ public class Db2Dialect extends Dialect {
             conn = DriverManager.getConnection(url, adminUser, adminPassword);
             stmt = conn.createStatement();
             stmt.execute("grant connect on database to user " + user);
-            ConnectionUtil.close(conn);
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
             try {
                 conn = DriverManager.getConnection(url, user, password); // ログインIDが存在しない場合に失敗する。
             } catch (SQLException e) {
@@ -139,8 +137,8 @@ public class Db2Dialect extends Dialect {
         } catch (SQLException e) {
             throw new MojoExecutionException("CREATE USER実行中にエラー", e);
         } finally {
-            StatementUtil.close(stmt);
-            ConnectionUtil.close(conn);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
 	
@@ -171,7 +169,7 @@ public class Db2Dialect extends Dialect {
       	    stmt.execute(grantSql);
     	  }
         } finally {
-            StatementUtil.close(stmt);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -188,9 +186,9 @@ public class Db2Dialect extends Dialect {
 		} catch (SQLException e) {
 			throw new MojoExecutionException("CREATE SCHEMA実行中にエラー", e);
 		} finally {
-			StatementUtil.close(userStmt);
-			StatementUtil.close(createUserStmt);
-			ConnectionUtil.close(conn);
+			if (userStmt != null) { try { userStmt.close(); } catch (SQLException ignore) {} }
+			if (createUserStmt != null) { try { createUserStmt.close(); } catch (SQLException ignore) {} }
+			if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
 		}
     }
 

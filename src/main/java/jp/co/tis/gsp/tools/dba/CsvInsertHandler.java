@@ -20,6 +20,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +28,6 @@ import java.util.Map;
 import jp.co.tis.gsp.tools.dba.dialect.Dialect;
 
 import org.apache.commons.lang.StringUtils;
-import org.seasar.framework.util.tiger.CollectionsUtil;
 
 
 public class CsvInsertHandler {
@@ -51,8 +51,8 @@ public class CsvInsertHandler {
 		this.conn = conn;
 		this.schema = schema;
 		this.tableName = tableName;
-		this.columns = CollectionsUtil.newArrayList(headers.length);
-		this.types   = CollectionsUtil.newArrayList(headers.length);
+		this.columns = new ArrayList<>(headers.length);
+		this.types   = new ArrayList<>(headers.length);
 		this.dialect = dialect;
 		initialize(headers);
 	}

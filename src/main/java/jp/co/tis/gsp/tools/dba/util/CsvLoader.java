@@ -7,6 +7,7 @@ import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -16,11 +17,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.logging.Log;
-import org.seasar.extension.jdbc.util.ConnectionUtil;
-import org.seasar.framework.util.DriverManagerUtil;
-import org.seasar.framework.util.FileInputStreamUtil;
-import org.seasar.framework.util.StringUtil;
-import org.seasar.framework.util.tiger.CollectionsUtil;
 
 import com.csvreader.CsvReader;
 
@@ -58,9 +54,12 @@ public class CsvLoader {
     }
 
     public void execute() throws SQLException, IOException {
-        List<File> files = CollectionsUtil
-                .newArrayList(FileUtils.listFiles(dataDirectory, new String[] { "csv" }, true));
-        DriverManagerUtil.registerDriver(driver);
+        List<File> files = new ArrayList<>(FileUtils.listFiles(dataDirectory, new String[] { "csv" }, true));
+        try {
+            Class.forName(driver);
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("JDBCドライバが見つかりません: " + driver, e);
+        }
         Connection conn = null;
         try {
             conn = DriverManager.getConnection(url, user, password);
@@ -84,7 +83,7 @@ public class CsvLoader {
 
             private int getIndex(String tableName) {
                 for (int i = 0; i < tableList.size(); i++) {
-                    if (StringUtil.equalsIgnoreCase(tableName, tableList.get(i))) {
+                    if (tableName.equalsIgnoreCase(tableList.get(i))) {
                         return i;
                     }
                 }
@@ -96,7 +95,7 @@ public class CsvLoader {
             for (File file : files) {
                 CsvReader reader = null;
                 String fileName = file.getName();
-                FileInputStream in = FileInputStreamUtil.create(file);
+                FileInputStream in = new FileInputStream(file);
                 try {
                     logger.info("取込を開始します:" + fileName);
                     if (specifiedEncodingFiles != null && specifiedEncodingFiles.containsKey(fileName)) {
@@ -137,7 +136,7 @@ public class CsvLoader {
                 }
             }
         } finally {
-            ConnectionUtil.close(conn);
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
 
     }

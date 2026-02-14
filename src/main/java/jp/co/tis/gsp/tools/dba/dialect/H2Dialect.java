@@ -10,8 +10,6 @@ import java.sql.Statement;
 import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
-import org.seasar.extension.jdbc.util.ConnectionUtil;
-import org.seasar.framework.util.StatementUtil;
 
 import jp.co.tis.gsp.tools.db.TypeMapper;
 import jp.co.tis.gsp.tools.dba.dialect.param.ExportParams;
@@ -40,11 +38,11 @@ public class H2Dialect extends Dialect {
             conn = DriverManager.getConnection(url, user, password);
             Statement stmt = conn.createStatement();
             stmt.execute("SCRIPT DROP TO '" + dumpFile.getAbsolutePath()+ "'");
-            StatementUtil.close(stmt);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         } catch (SQLException e) {
             throw new MojoExecutionException("Schema export実行中にエラー", e);
         } finally {
-            ConnectionUtil.close(conn);
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -76,8 +74,8 @@ public class H2Dialect extends Dialect {
         } catch (SQLException e) {
             throw new MojoExecutionException("DROP ALL実行中にエラー", e);
         } finally {
-            StatementUtil.close(pstmt);
-            ConnectionUtil.close(conn);
+            if (pstmt != null) { try { pstmt.close(); } catch (SQLException ignore) {} }
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
     
@@ -105,11 +103,11 @@ public class H2Dialect extends Dialect {
             conn = DriverManager.getConnection(url, user, password);
             Statement stmt = conn.createStatement();
             stmt.execute("RUNSCRIPT FROM '" + dumpFile.getAbsolutePath()+ "'");
-            StatementUtil.close(stmt);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         } catch (Exception e) {
             throw new MojoExecutionException("Schema import実行中にエラー", e);
         } finally {
-            ConnectionUtil.close(conn);
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -125,8 +123,8 @@ public class H2Dialect extends Dialect {
         } catch (SQLException e) {
             throw new MojoExecutionException("CREATE USER 実行中にエラー: ", e);
         } finally {
-            StatementUtil.close(stmt);
-            ConnectionUtil.close(conn);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+            if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
         }
     }
 

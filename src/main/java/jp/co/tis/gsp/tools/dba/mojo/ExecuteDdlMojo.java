@@ -24,8 +24,6 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.seasar.framework.util.DriverManagerUtil;
-
 import jp.co.tis.gsp.tools.dba.dialect.Dialect;
 import jp.co.tis.gsp.tools.dba.dialect.DialectFactory;
 import jp.co.tis.gsp.tools.dba.util.SqlExecutor;
@@ -53,7 +51,11 @@ public class ExecuteDdlMojo extends AbstractDbaMojo {
 
 	@Override
 	protected void executeMojoSpec() throws MojoExecutionException, MojoFailureException {
-        DriverManagerUtil.registerDriver(driver);
+        try {
+            Class.forName(driver);
+        } catch (ClassNotFoundException e) {
+            throw new MojoExecutionException("JDBCドライバが見つかりません: " + driver, e);
+        }
 		Dialect dialect = DialectFactory.getDialect(url, driver);
 		
 		// ユーザの作成を行います

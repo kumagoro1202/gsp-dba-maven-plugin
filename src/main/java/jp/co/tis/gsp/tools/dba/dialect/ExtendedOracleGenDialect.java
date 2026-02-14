@@ -23,7 +23,6 @@ import java.sql.Timestamp;
 import javax.persistence.TemporalType;
 
 import org.seasar.extension.jdbc.gen.internal.dialect.OracleGenDialect;
-import org.seasar.framework.util.StringUtil;
 
 /**
  * @author kawasima
@@ -60,7 +59,7 @@ public class ExtendedOracleGenDialect extends OracleGenDialect {
     
     @Override
     public ColumnType getColumnType(String typeName, int sqlType) {
-        if (useOracleDate && StringUtil.equalsIgnoreCase(typeName, "date")) {
+        if (useOracleDate && "date".equalsIgnoreCase(typeName)) {
             return ExtendedOracleColumnType.DATE;
         }
         ColumnType columnType = columnTypeMap.get(typeName);
@@ -68,7 +67,7 @@ public class ExtendedOracleGenDialect extends OracleGenDialect {
             return columnType;
         }
 
-        if (StringUtil.startsWithIgnoreCase(typeName, "timestamp")) {
+        if (typeName != null && typeName.toLowerCase().startsWith("timestamp")) {
             typeName = "timestamp";
         }
         return super.getColumnType(typeName, sqlType);

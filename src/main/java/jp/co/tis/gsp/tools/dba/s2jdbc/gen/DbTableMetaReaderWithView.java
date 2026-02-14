@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,9 +37,7 @@ import org.seasar.extension.jdbc.gen.internal.meta.DbTableMetaReaderImpl;
 import org.seasar.extension.jdbc.gen.meta.DbForeignKeyMeta;
 import org.seasar.extension.jdbc.gen.meta.DbTableMeta;
 import org.seasar.extension.jdbc.gen.meta.DbUniqueKeyMeta;
-import org.seasar.framework.exception.SQLRuntimeException;
-import org.seasar.framework.util.ArrayMap;
-import org.seasar.framework.util.ResultSetUtil;
+import jp.co.tis.gsp.tools.dba.util.UncheckedSQLException;
 
 import jp.co.tis.gsp.tools.dba.dialect.Dialect;
 import jp.co.tis.gsp.tools.dba.util.DialectUtil;
@@ -72,10 +71,10 @@ public class DbTableMetaReaderWithView extends DbTableMetaReaderImpl {
 	            }
 	            return result;
 	        } finally {
-	            ResultSetUtil.close(rs);
+	            if (rs != null) { try { rs.close(); } catch (SQLException ignore) {} }
 	        }
 	    } catch (SQLException e) {
-	        throw new SQLRuntimeException(e);
+	        throw new UncheckedSQLException(e);
 	    }
     }
 
@@ -92,7 +91,7 @@ public class DbTableMetaReaderWithView extends DbTableMetaReaderImpl {
         }
 
         @SuppressWarnings("unchecked")
-        Map<String, DbUniqueKeyMeta> map = new ArrayMap();
+        Map<String, DbUniqueKeyMeta> map = new LinkedHashMap<>();
         try {
         	// テーブルじゃなければ読み飛ばす！
         	String typeName = getObjectTypeName(metaData, tableMeta);
@@ -119,14 +118,14 @@ public class DbTableMetaReaderWithView extends DbTableMetaReaderImpl {
                     ukMeta.addColumnName(rs.getString("COLUMN_NAME"));
                 }
             } finally {
-                ResultSetUtil.close(rs);
+                if (rs != null) { try { rs.close(); } catch (SQLException ignore) {} }
             }
 
             DbUniqueKeyMeta[] array = map.values().toArray(
                     new DbUniqueKeyMeta[map.size()]);
             return Arrays.asList(array);
         } catch (SQLException ex) {
-            throw new SQLRuntimeException(ex);
+            throw new UncheckedSQLException(ex);
         }
     }
 
@@ -157,7 +156,7 @@ public class DbTableMetaReaderWithView extends DbTableMetaReaderImpl {
                     result.add(rs.getString("COLUMN_NAME"));
                 }
             } finally {
-                ResultSetUtil.close(rs);
+                if (rs != null) { try { rs.close(); } catch (SQLException ignore) {} }
             }
 
             if (viewAnalyzer != null && !result.isEmpty()) {
@@ -176,7 +175,7 @@ public class DbTableMetaReaderWithView extends DbTableMetaReaderImpl {
             }
             return result;
         } catch (SQLException ex) {
-            throw new SQLRuntimeException(ex);
+            throw new UncheckedSQLException(ex);
         }
     }
 
@@ -184,7 +183,7 @@ public class DbTableMetaReaderWithView extends DbTableMetaReaderImpl {
     protected List<DbForeignKeyMeta> getDbForeignKeyMetaList(
             DatabaseMetaData metaData, DbTableMeta tableMeta) {
         @SuppressWarnings("unchecked")
-        Map<String, DbForeignKeyMeta> map = new ArrayMap();
+        Map<String, DbForeignKeyMeta> map = new LinkedHashMap<>();
         Dialect gspDialect = DialectUtil.getDialect();
         try {
             String typeName = getObjectTypeName(metaData, tableMeta);
@@ -223,11 +222,11 @@ public class DbTableMetaReaderWithView extends DbTableMetaReaderImpl {
                             .getString("FKCOLUMN_NAME"));
                 }
             } finally {
-                ResultSetUtil.close(rs);
+                if (rs != null) { try { rs.close(); } catch (SQLException ignore) {} }
             }
             if (viewAnalyzer != null && !map.isEmpty()) {
             	
-            	Map<String, DbForeignKeyMeta> tmpMap = new ArrayMap(map);
+            	Map<String, DbForeignKeyMeta> tmpMap = new LinkedHashMap<>(map);
             	
             	for (DbForeignKeyMeta fkMeta : tmpMap.values()) {
             		boolean fkContains = true;
@@ -243,7 +242,7 @@ public class DbTableMetaReaderWithView extends DbTableMetaReaderImpl {
                     new DbForeignKeyMeta[map.size()]);
             return Arrays.asList(array);
         } catch (SQLException ex) {
-            throw new SQLRuntimeException(ex);
+            throw new UncheckedSQLException(ex);
         }
     }
 
@@ -254,7 +253,7 @@ public class DbTableMetaReaderWithView extends DbTableMetaReaderImpl {
     		String typeName = rs.getString("TABLE_TYPE");
     		return typeName;
     	} finally {
-    		ResultSetUtil.close(rs);
+    		if (rs != null) { try { rs.close(); } catch (SQLException ignore) {} }
     	}
     }
 

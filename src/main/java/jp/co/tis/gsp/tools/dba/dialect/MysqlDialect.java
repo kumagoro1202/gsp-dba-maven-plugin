@@ -28,18 +28,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
 import org.seasar.extension.jdbc.gen.meta.DbTableMeta;
-import org.seasar.extension.jdbc.util.ConnectionUtil;
-import org.seasar.framework.util.FileOutputStreamUtil;
-import org.seasar.framework.util.ResultSetUtil;
-import org.seasar.framework.util.StatementUtil;
-import org.seasar.framework.util.StringUtil;
-import org.seasar.framework.util.tiger.Maps;
 
 import jp.co.tis.gsp.tools.db.TypeMapper;
 import jp.co.tis.gsp.tools.dba.dialect.param.ExportParams;
@@ -58,20 +53,20 @@ public class MysqlDialect extends Dialect {
         );
     }
 
-	private Map<Integer, String> typeToNameMap = Maps
-		.map(Types.BIGINT, "BIGINT")
-		.$(Types.BLOB, "BLOB")
-		.$(Types.BOOLEAN, "BOOLEAN")
-		.$(Types.CHAR, "CHAR")
-		.$(Types.CLOB, "TEXT")
-		.$(Types.DATE, "DATE")
-		.$(Types.DECIMAL, "NUMBER")
-		.$(Types.DOUBLE, "DOUBLE")
-		.$(Types.FLOAT, "FLOAT")
-		.$(Types.INTEGER, "INT")
-		.$(Types.TIMESTAMP, "TIMESTAMP")
-		.$(Types.VARCHAR, "VARCHAR")
-		.$();
+	private Map<Integer, String> typeToNameMap = new HashMap<>(Map.ofEntries(
+		Map.entry(Types.BIGINT, "BIGINT"),
+		Map.entry(Types.BLOB, "BLOB"),
+		Map.entry(Types.BOOLEAN, "BOOLEAN"),
+		Map.entry(Types.CHAR, "CHAR"),
+		Map.entry(Types.CLOB, "TEXT"),
+		Map.entry(Types.DATE, "DATE"),
+		Map.entry(Types.DECIMAL, "NUMBER"),
+		Map.entry(Types.DOUBLE, "DOUBLE"),
+		Map.entry(Types.FLOAT, "FLOAT"),
+		Map.entry(Types.INTEGER, "INT"),
+		Map.entry(Types.TIMESTAMP, "TIMESTAMP"),
+		Map.entry(Types.VARCHAR, "VARCHAR")
+	));
 
 
 
@@ -97,7 +92,7 @@ public class MysqlDialect extends Dialect {
 			Process process = pb.start();
 			in = new BufferedInputStream(process.getInputStream());
 
-			out = FileOutputStreamUtil.create(dumpFile);
+			out = new FileOutputStream(dumpFile);
 			byte[] buf = new byte[4096];
 			while(true) {
 				int res = in.read(buf);
@@ -150,8 +145,8 @@ public class MysqlDialect extends Dialect {
 		} catch (SQLException e) {
 			throw new MojoExecutionException("データ削除中にエラー", e);
 		} finally {
-			StatementUtil.close(stmt);
-			ConnectionUtil.close(conn);
+			if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+			if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
 		}
 	}
 	
@@ -186,7 +181,7 @@ public class MysqlDialect extends Dialect {
     	  }
         } finally {
         	rs.close();
-            StatementUtil.close(stmt);
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
     }
 
@@ -209,8 +204,8 @@ public class MysqlDialect extends Dialect {
 		} catch (SQLException e) {
 			throw new MojoExecutionException("CREATE USER実行中にエラー", e);
 		} finally {
-			StatementUtil.close(stmt);
-			ConnectionUtil.close(conn);
+			if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
+			if (conn != null) { try { conn.close(); } catch (SQLException ignore) {} }
 		}
 	}
 
@@ -224,7 +219,7 @@ public class MysqlDialect extends Dialect {
 			rs.next();
 			return (rs.getInt("num") > 0);
 		} finally {
-			StatementUtil.close(stmt);
+			if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
 		}
 	}
 	
@@ -307,8 +302,8 @@ public class MysqlDialect extends Dialect {
                 return rs.getString(1);
             }
         } finally {
-            ResultSetUtil.close(rs);
-            StatementUtil.close(stmt);
+            if (rs != null) { try { rs.close(); } catch (SQLException ignore) {} }
+            if (stmt != null) { try { stmt.close(); } catch (SQLException ignore) {} }
         }
         return null;
     }
@@ -317,7 +312,7 @@ public class MysqlDialect extends Dialect {
     public void setObjectInStmt(PreparedStatement stmt, int parameterIndex, String value, int sqlType) throws SQLException {
         if(sqlType == UN_USABLE_TYPE) {
             stmt.setNull(parameterIndex, Types.NULL);
-        } else if(StringUtil.isBlank(value) || "　".equals(value)) {
+        } else if(value == null || value.isBlank() || "　".equals(value)) {
             stmt.setNull(parameterIndex, sqlType);
         } else if(sqlType == Types.TIMESTAMP) {
             stmt.setTimestamp(parameterIndex, Timestamp.valueOf(value));
