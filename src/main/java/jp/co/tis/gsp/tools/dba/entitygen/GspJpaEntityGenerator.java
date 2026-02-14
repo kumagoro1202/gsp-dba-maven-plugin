@@ -27,6 +27,7 @@ import org.jooq.meta.UniqueKeyDefinition;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -60,6 +61,9 @@ public class GspJpaEntityGenerator extends JavaGenerator {
         String packageName = getStrategy().getJavaPackageName(table, Mode.POJO);
         List<ColumnDefinition> columns = table.getColumns();
 
+        // VIEW判定
+        boolean isViewTable = GspViewSupport.isView(table.getOutputName());
+
         // バージョンカラムの事前判定（import生成に必要）
         boolean hasVersionColumn = false;
         if (versionPattern != null && !versionPattern.isEmpty()) {
@@ -87,7 +91,7 @@ public class GspJpaEntityGenerator extends JavaGenerator {
 
         boolean hasIdentity = hasIdentityColumn(table);
         boolean hasSequence = false;
-        if (hasId) {
+        if (hasId && !isViewTable) {
             out.println("import jakarta.persistence.GeneratedValue;");
             out.println("import jakarta.persistence.GenerationType;");
             if (!hasIdentity) {
@@ -155,16 +159,18 @@ public class GspJpaEntityGenerator extends JavaGenerator {
             if (isPk) {
                 out.println("    @Id");
 
-                // @GeneratedValue
-                if (hasIdentity) {
-                    out.println("    @GeneratedValue(strategy = GenerationType.IDENTITY)");
-                } else {
-                    String seqName = column.getOutputName() + "_SEQ";
-                    if (schemaName != null && !schemaName.isEmpty() && !"PUBLIC".equals(schemaName)) {
-                        seqName = schemaName + "." + seqName;
+                // @GeneratedValue（VIEWの場合は生成しない）
+                if (!isViewTable) {
+                    if (hasIdentity) {
+                        out.println("    @GeneratedValue(strategy = GenerationType.IDENTITY)");
+                    } else {
+                        String seqName = column.getOutputName() + "_SEQ";
+                        if (schemaName != null && !schemaName.isEmpty() && !"PUBLIC".equals(schemaName)) {
+                            seqName = schemaName + "." + seqName;
+                        }
+                        out.println("    @GeneratedValue(generator = \"%s\", strategy = GenerationType.AUTO)", seqName);
+                        out.println("    @SequenceGenerator(name = \"%s\", sequenceName = \"%s\", initialValue = 1, allocationSize = %d)", seqName, seqName, allocationSize);
                     }
-                    out.println("    @GeneratedValue(generator = \"%s\", strategy = GenerationType.AUTO)", seqName);
-                    out.println("    @SequenceGenerator(name = \"%s\", sequenceName = \"%s\", initialValue = 1, allocationSize = %d)", seqName, seqName, allocationSize);
                 }
             }
 
@@ -233,11 +239,21 @@ public class GspJpaEntityGenerator extends JavaGenerator {
     }
 
     /**
+     * テーブルがVIEWであるかを判定する。
+     */
+    private boolean isView(TableDefinition table) {
+        return GspViewSupport.isView(table.getOutputName());
+    }
+
+    /**
      * テーブルにPKがあるかどうかを判定する。
+     * VIEWの場合は{@link GspViewSupport}の推定PKを確認する。
      */
     private boolean hasPrimaryKey(TableDefinition table) {
         UniqueKeyDefinition pk = table.getPrimaryKey();
-        return pk != null && !pk.getKeyColumns().isEmpty();
+        if (pk != null && !pk.getKeyColumns().isEmpty()) return true;
+        // VIEWの推定PKを確認
+        return !getInferredOrActualPKs(table).isEmpty();
     }
 
     /**
@@ -245,17 +261,34 @@ public class GspJpaEntityGenerator extends JavaGenerator {
      */
     private int getPrimaryKeyColumnCount(TableDefinition table) {
         UniqueKeyDefinition pk = table.getPrimaryKey();
-        return pk != null ? pk.getKeyColumns().size() : 0;
+        if (pk != null) return pk.getKeyColumns().size();
+        return getInferredOrActualPKs(table).size();
     }
 
     /**
      * カラムがPKに含まれるかを判定する。
+     * VIEWの場合は{@link GspViewSupport}の推定PKを確認する。
      */
     private boolean isPrimaryKey(TableDefinition table, ColumnDefinition column) {
         UniqueKeyDefinition pk = table.getPrimaryKey();
-        if (pk == null) return false;
-        return pk.getKeyColumns().stream()
-            .anyMatch(c -> c.getName().equals(column.getName()));
+        if (pk != null) {
+            return pk.getKeyColumns().stream()
+                .anyMatch(c -> c.getName().equals(column.getName()));
+        }
+        // VIEWの推定PKを確認
+        List<String> inferredPKs = getInferredOrActualPKs(table);
+        return inferredPKs.stream()
+            .anyMatch(pkName -> pkName.equalsIgnoreCase(column.getName()));
+    }
+
+    /**
+     * VIEWの推定PKカラム名リストを返す。VIEWでない場合は空リスト。
+     */
+    private List<String> getInferredOrActualPKs(TableDefinition table) {
+        if (GspViewSupport.isView(table.getOutputName())) {
+            return GspViewSupport.getInferredPrimaryKeys(table.getOutputName());
+        }
+        return Collections.emptyList();
     }
 
     /**

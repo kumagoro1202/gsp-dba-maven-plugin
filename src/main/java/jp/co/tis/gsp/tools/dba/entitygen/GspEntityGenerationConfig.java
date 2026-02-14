@@ -84,11 +84,12 @@ public class GspEntityGenerationConfig {
     }
 
     /**
-     * Entity生成パラメータをクリアする。
+     * Entity生成パラメータとVIEW解析結果をクリアする。
      * {@code GenerationTool.generate()}完了後に呼び出すこと。
      */
     public static void clearParams() {
         CURRENT_PARAMS.remove();
+        GspViewSupport.clear();
     }
 
     private GspEntityGenerationConfig() {
@@ -125,6 +126,9 @@ public class GspEntityGenerationConfig {
 
         // Generator向けパラメータをThreadLocalに設定
         CURRENT_PARAMS.set(new EntityGenParams(useAccessor, allocationSize, versionColumnNamePattern));
+
+        // VIEW解析（PKの推定）
+        GspViewSupport.analyzeViews(jdbcUrl, jdbcUser, jdbcPassword, schemaName);
 
         return buildConfiguration(jdbcUrl, jdbcUser, jdbcPassword, jdbcDriver,
                 schemaName, rootPackage, entityPackageName,
