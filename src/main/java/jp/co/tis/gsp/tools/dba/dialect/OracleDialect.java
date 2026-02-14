@@ -40,8 +40,6 @@ import javax.persistence.GenerationType;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
-
 import jp.co.tis.gsp.tools.db.TypeMapper;
 import jp.co.tis.gsp.tools.dba.dialect.param.ExportParams;
 import jp.co.tis.gsp.tools.dba.dialect.param.ImportParams;
@@ -50,7 +48,7 @@ public class OracleDialect extends Dialect {
     protected final SimpleDateFormat sdfDate = new SimpleDateFormat("yyyy-MM-dd");
 
 	private static final List<String> USABLE_TYPE_NAMES = new ArrayList<String>();
-	
+
 	static {
 		USABLE_TYPE_NAMES.add("CHAR");
 		USABLE_TYPE_NAMES.add("DATE");
@@ -76,16 +74,6 @@ public class OracleDialect extends Dialect {
 			Map.entry(Types.TIMESTAMP, "TIMESTAMP"),
 			Map.entry(Types.VARCHAR, "VARCHAR2")
 	));
-
-    public OracleDialect() {
-        GenDialectRegistry.deregister(
-                org.seasar.extension.jdbc.dialect.OracleDialect.class
-        );
-        GenDialectRegistry.register(
-                org.seasar.extension.jdbc.dialect.OracleDialect.class,
-                new ExtendedOracleGenDialect()
-        );
-    }
 
     private void createDirectory(String user, String password, File directory) throws SQLException {
         Connection conn = null;

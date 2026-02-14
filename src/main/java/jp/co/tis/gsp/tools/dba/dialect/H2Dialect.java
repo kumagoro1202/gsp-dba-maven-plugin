@@ -9,23 +9,11 @@ import java.sql.Statement;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
-
 import jp.co.tis.gsp.tools.db.TypeMapper;
 import jp.co.tis.gsp.tools.dba.dialect.param.ExportParams;
 import jp.co.tis.gsp.tools.dba.dialect.param.ImportParams;
 
 public class H2Dialect extends Dialect {
-    
-    public H2Dialect(){
-        GenDialectRegistry.deregister(
-                org.seasar.extension.jdbc.dialect.H2Dialect.class
-        );
-        GenDialectRegistry.register(
-                org.seasar.extension.jdbc.dialect.H2Dialect.class,
-                new ExtendedH2GenDialect()
-        );
-    }
 
     @Override
     public void exportSchema(ExportParams params) throws MojoExecutionException {

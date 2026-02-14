@@ -34,8 +34,6 @@ import java.util.Map;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
-
 import jp.co.tis.gsp.tools.db.TypeMapper;
 import jp.co.tis.gsp.tools.dba.dialect.param.ExportParams;
 import jp.co.tis.gsp.tools.dba.dialect.param.ImportParams;
@@ -43,7 +41,7 @@ import jp.co.tis.gsp.tools.dba.util.ProcessUtil;
 
 public class PostgresqlDialect extends Dialect {
     private static final List<String> USABLE_TYPE_NAMES = new ArrayList<String>();
-    
+
     static {
         USABLE_TYPE_NAMES.add("int8");
         USABLE_TYPE_NAMES.add("bigserial");
@@ -59,16 +57,6 @@ public class PostgresqlDialect extends Dialect {
         USABLE_TYPE_NAMES.add("text");
         USABLE_TYPE_NAMES.add("timestamp");
         USABLE_TYPE_NAMES.add("varchar");
-    }
-    
-    public PostgresqlDialect() {
-        GenDialectRegistry.deregister(
-                org.seasar.extension.jdbc.dialect.PostgreDialect.class
-        );
-        GenDialectRegistry.register(
-                org.seasar.extension.jdbc.dialect.PostgreDialect.class,
-                new ExtendedPostgreGenDialect()
-        );
     }
 
     @Override

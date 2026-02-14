@@ -30,8 +30,6 @@ import java.util.List;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
-
 import jp.co.tis.gsp.tools.db.EntityDependencyParser;
 import jp.co.tis.gsp.tools.db.TypeMapper;
 
@@ -68,16 +66,6 @@ public class SqlserverDialect extends Dialect {
         USABLE_TYPE_NAMES.add("varbinary");
         USABLE_TYPE_NAMES.add("varchar");
         USABLE_TYPE_NAMES.add("int identity");
-    }
-    
-    public SqlserverDialect() {
-        GenDialectRegistry.deregister(
-                org.seasar.extension.jdbc.dialect.MssqlDialect.class
-        );
-        GenDialectRegistry.register(
-                org.seasar.extension.jdbc.dialect.MssqlDialect.class,
-                new ExtendedMssqlGenDialect()
-        );
     }
     
     @Override

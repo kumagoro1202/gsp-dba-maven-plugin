@@ -27,13 +27,11 @@ import java.util.List;
 
 import org.apache.maven.plugin.MojoExecutionException;
 import org.codehaus.plexus.util.StringUtils;
-import org.seasar.extension.jdbc.gen.dialect.GenDialectRegistry;
-
 import jp.co.tis.gsp.tools.db.TypeMapper;
 
 public class Db2Dialect extends Dialect {
     private static final List<String> USABLE_TYPE_NAMES = new ArrayList<String>();
-    
+
     static {
         USABLE_TYPE_NAMES.add("BIGINT");
         USABLE_TYPE_NAMES.add("CHAR");
@@ -53,16 +51,6 @@ public class Db2Dialect extends Dialect {
         USABLE_TYPE_NAMES.add("TIMESTAMP");
         USABLE_TYPE_NAMES.add("VARCHAR");
         USABLE_TYPE_NAMES.add("VARGRAPHIC");
-    }
-    
-    public Db2Dialect() {
-        GenDialectRegistry.deregister(
-                org.seasar.extension.jdbc.dialect.Db2Dialect.class
-        );
-        GenDialectRegistry.register(
-                org.seasar.extension.jdbc.dialect.Db2Dialect.class,
-                new ExtendedDb2GenDialect()
-        );
     }
 
     @Override
