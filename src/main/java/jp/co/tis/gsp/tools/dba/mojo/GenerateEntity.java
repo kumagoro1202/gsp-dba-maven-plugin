@@ -63,7 +63,9 @@ public class GenerateEntity extends AbstractDbaMojo {
 
     /**
      * dicon directory.
+     * @deprecated S2JDBC-Gen依存のため非推奨。jOOQベースのEntity生成では使用しない。
      */
+    @Deprecated
     @Parameter(defaultValue = "target/classes")
     protected File diconDir;
 
@@ -81,13 +83,17 @@ public class GenerateEntity extends AbstractDbaMojo {
 
     /**
      * gen dialect class name.
+     * @deprecated jOOQベースのEntity生成ではDialect自動判定のため不要。指定しても無視される。
      */
+    @Deprecated
     @Parameter
     protected String genDialectClassName;
 
     /**
      * dialect class name.
+     * @deprecated jOOQベースのEntity生成ではDialect自動判定のため不要。指定しても無視される。
      */
+    @Deprecated
     @Parameter
     protected String dialectClassName;
 
@@ -148,6 +154,9 @@ public class GenerateEntity extends AbstractDbaMojo {
      */
     @Override
 	protected void executeMojoSpec() throws MojoExecutionException, MojoFailureException {
+        // 非推奨パラメータの警告
+        warnDeprecatedParameters();
+
         Configuration fmConfig = new Configuration(Configuration.VERSION_2_3_31);
         fmConfig.setTemplateLoader(new ClassTemplateLoader(Erd.class, "/jp/co/tis/gsp/tools/dba/template/dicon"));
         fmConfig.setOutputFormat(XMLOutputFormat.INSTANCE);
@@ -251,6 +260,20 @@ public class GenerateEntity extends AbstractDbaMojo {
             invoker.invoke(command);
         } finally {
             Thread.currentThread().setContextClassLoader(oldLoader);
+        }
+    }
+
+    /**
+     * 非推奨パラメータが指定されている場合に警告ログを出力する。
+     */
+    private void warnDeprecatedParameters() {
+        if (genDialectClassName != null && !genDialectClassName.isEmpty()) {
+            getLog().warn("Parameter 'genDialectClassName' is deprecated and will be ignored. "
+                    + "jOOQ handles dialect automatically.");
+        }
+        if (dialectClassName != null && !dialectClassName.isEmpty()) {
+            getLog().warn("Parameter 'dialectClassName' is deprecated and will be ignored. "
+                    + "jOOQ handles dialect automatically.");
         }
     }
 

@@ -29,14 +29,113 @@ import java.io.File;
 /**
  * MojoパラメータからjOOQ Code Generation設定を構築する。
  * S2JDBC-Genのdicon設定ファイル生成を代替する。
+ *
+ * <p>jOOQはGeneratorをリフレクションで生成するため、
+ * Mojoパラメータ（useAccessor, allocationSize, versionColumnNamePattern）は
+ * ThreadLocal経由で{@link GspJpaEntityGenerator}に受け渡す。</p>
  */
 public class GspEntityGenerationConfig {
+
+    /**
+     * Entity生成時のパラメータ。
+     * jOOQがリフレクションでGeneratorを生成するため、ThreadLocal経由で受け渡す。
+     */
+    public static class EntityGenParams {
+        private final boolean useAccessor;
+        private final int allocationSize;
+        private final String versionColumnNamePattern;
+
+        /**
+         * @param useAccessor アクセサ（getter/setter）を生成するか
+         * @param allocationSize {@code @SequenceGenerator}のallocationSize
+         * @param versionColumnNamePattern {@code @Version}付与対象カラム名パターン（正規表現）
+         */
+        public EntityGenParams(boolean useAccessor, int allocationSize, String versionColumnNamePattern) {
+            this.useAccessor = useAccessor;
+            this.allocationSize = allocationSize;
+            this.versionColumnNamePattern = versionColumnNamePattern;
+        }
+
+        /** アクセサ（getter/setter）を生成するか */
+        public boolean isUseAccessor() { return useAccessor; }
+
+        /** {@code @SequenceGenerator}のallocationSize */
+        public int getAllocationSize() { return allocationSize; }
+
+        /** {@code @Version}アノテーション付与対象のカラム名パターン（正規表現） */
+        public String getVersionColumnNamePattern() { return versionColumnNamePattern; }
+    }
+
+    /** デフォルトパラメータ（useAccessor=false, allocationSize=1, versionColumnNamePattern=null） */
+    private static final EntityGenParams DEFAULT_PARAMS = new EntityGenParams(false, 1, null);
+
+    /** Generator向けパラメータ受け渡し用ThreadLocal */
+    private static final ThreadLocal<EntityGenParams> CURRENT_PARAMS = new ThreadLocal<>();
+
+    /**
+     * 現在のEntity生成パラメータを取得する。
+     * 設定されていない場合はデフォルト値を返す。
+     *
+     * @return Entity生成パラメータ
+     */
+    public static EntityGenParams getParams() {
+        EntityGenParams params = CURRENT_PARAMS.get();
+        return params != null ? params : DEFAULT_PARAMS;
+    }
+
+    /**
+     * Entity生成パラメータをクリアする。
+     * {@code GenerationTool.generate()}完了後に呼び出すこと。
+     */
+    public static void clearParams() {
+        CURRENT_PARAMS.remove();
+    }
 
     private GspEntityGenerationConfig() {
     }
 
     /**
-     * jOOQ Code Generation用の設定オブジェクトを構築する。
+     * jOOQ Code Generation用の設定オブジェクトを構築する（フルパラメータ版）。
+     *
+     * <p>Mojoパラメータを全て受け取り、Generator向けのパラメータは
+     * ThreadLocalに設定して{@link GspJpaEntityGenerator}から参照可能にする。</p>
+     *
+     * @param jdbcUrl JDBC URL
+     * @param jdbcUser JDBCユーザ
+     * @param jdbcPassword JDBCパスワード
+     * @param jdbcDriver JDBCドライバクラス名
+     * @param schemaName スキーマ名
+     * @param rootPackage ルートパッケージ
+     * @param entityPackageName エンティティパッケージ名
+     * @param javaFileDestDir 出力先ディレクトリ
+     * @param entityType エンティティ種別（"jpa" or "doma"）
+     * @param ignoreTableNamePattern 無視するテーブル名パターン
+     * @param useJSR310 JSR310を使用するか
+     * @param useAccessor アクセサ（getter/setter）を生成するか
+     * @param allocationSize {@code @SequenceGenerator}のallocationSize
+     * @param versionColumnNamePattern {@code @Version}付与対象カラム名パターン
+     * @return jOOQ Configuration
+     */
+    public static Configuration create(
+            String jdbcUrl, String jdbcUser, String jdbcPassword, String jdbcDriver,
+            String schemaName, String rootPackage, String entityPackageName,
+            File javaFileDestDir, String entityType,
+            String ignoreTableNamePattern, boolean useJSR310,
+            boolean useAccessor, int allocationSize, String versionColumnNamePattern) {
+
+        // Generator向けパラメータをThreadLocalに設定
+        CURRENT_PARAMS.set(new EntityGenParams(useAccessor, allocationSize, versionColumnNamePattern));
+
+        return buildConfiguration(jdbcUrl, jdbcUser, jdbcPassword, jdbcDriver,
+                schemaName, rootPackage, entityPackageName,
+                javaFileDestDir, entityType, ignoreTableNamePattern, useJSR310);
+    }
+
+    /**
+     * jOOQ Code Generation用の設定オブジェクトを構築する（後方互換版）。
+     *
+     * <p>useAccessor=false, allocationSize=1, versionColumnNamePattern=nullで
+     * フルパラメータ版を呼び出す。</p>
      *
      * @param jdbcUrl JDBC URL
      * @param jdbcUser JDBCユーザ
@@ -52,6 +151,21 @@ public class GspEntityGenerationConfig {
      * @return jOOQ Configuration
      */
     public static Configuration create(
+            String jdbcUrl, String jdbcUser, String jdbcPassword, String jdbcDriver,
+            String schemaName, String rootPackage, String entityPackageName,
+            File javaFileDestDir, String entityType,
+            String ignoreTableNamePattern, boolean useJSR310) {
+
+        return create(jdbcUrl, jdbcUser, jdbcPassword, jdbcDriver,
+                schemaName, rootPackage, entityPackageName,
+                javaFileDestDir, entityType, ignoreTableNamePattern, useJSR310,
+                false, 1, null);
+    }
+
+    /**
+     * jOOQ Configurationオブジェクトを構築する（内部メソッド）。
+     */
+    private static Configuration buildConfiguration(
             String jdbcUrl, String jdbcUser, String jdbcPassword, String jdbcDriver,
             String schemaName, String rootPackage, String entityPackageName,
             File javaFileDestDir, String entityType,

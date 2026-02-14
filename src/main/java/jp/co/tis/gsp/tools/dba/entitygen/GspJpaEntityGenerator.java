@@ -26,27 +26,46 @@ import org.jooq.meta.TableDefinition;
 import org.jooq.meta.UniqueKeyDefinition;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * jOOQ JavaGeneratorを拡張し、gsp-dba-maven-plugin互換のJPA Entityを生成する。
  *
- * 生成されるEntityの特徴:
+ * <p>生成されるEntityの特徴:</p>
  * <ul>
  *   <li>Jakarta Persistence API（jakarta.persistence.*）使用</li>
  *   <li>{@code @Generated("GSP")} アノテーション付与</li>
  *   <li>{@code @Entity}, {@code @Table}, {@code @Column}, {@code @Id} 等</li>
  *   <li>{@link Serializable}実装</li>
- *   <li>publicフィールド（gspデフォルト）</li>
+ *   <li>useAccessor=false時: publicフィールド（gspデフォルト）</li>
+ *   <li>useAccessor=true時: privateフィールド + getter/setter</li>
+ *   <li>versionColumnNamePattern指定時: 一致カラムに{@code @Version}付与</li>
  * </ul>
+ *
+ * <p>Mojoパラメータは{@link GspEntityGenerationConfig.EntityGenParams}経由で
+ * ThreadLocalから取得する。</p>
  */
 public class GspJpaEntityGenerator extends JavaGenerator {
 
     @Override
     protected void generatePojo(TableDefinition table, JavaWriter out) {
+        // パラメータ取得
+        GspEntityGenerationConfig.EntityGenParams params = GspEntityGenerationConfig.getParams();
+        int allocationSize = params.getAllocationSize();
+        boolean useAccessor = params.isUseAccessor();
+        String versionPattern = params.getVersionColumnNamePattern();
+
         String className = getStrategy().getJavaClassName(table, Mode.POJO);
         String packageName = getStrategy().getJavaPackageName(table, Mode.POJO);
         List<ColumnDefinition> columns = table.getColumns();
+
+        // バージョンカラムの事前判定（import生成に必要）
+        boolean hasVersionColumn = false;
+        if (versionPattern != null && !versionPattern.isEmpty()) {
+            hasVersionColumn = columns.stream()
+                .anyMatch(c -> c.getOutputName().matches(versionPattern));
+        }
 
         // パッケージ宣言
         if (packageName != null && !packageName.isEmpty()) {
@@ -75,6 +94,10 @@ public class GspJpaEntityGenerator extends JavaGenerator {
                 out.println("import jakarta.persistence.SequenceGenerator;");
                 hasSequence = true;
             }
+        }
+
+        if (hasVersionColumn) {
+            out.println("import jakarta.persistence.Version;");
         }
 
         // 型インポート
@@ -107,7 +130,13 @@ public class GspJpaEntityGenerator extends JavaGenerator {
         out.println();
         out.println("    private static final long serialVersionUID = 1L;");
 
+        // アクセサ生成用のフィールド情報を収集
+        List<String> fieldNames = new ArrayList<>();
+        List<String> fieldSimpleTypes = new ArrayList<>();
+
         // フィールド
+        String accessModifier = useAccessor ? "private" : "public";
+
         for (ColumnDefinition column : columns) {
             out.println();
             String fieldName = getStrategy().getJavaMemberName(column, Mode.POJO);
@@ -135,8 +164,14 @@ public class GspJpaEntityGenerator extends JavaGenerator {
                         seqName = schemaName + "." + seqName;
                     }
                     out.println("    @GeneratedValue(generator = \"%s\", strategy = GenerationType.AUTO)", seqName);
-                    out.println("    @SequenceGenerator(name = \"%s\", sequenceName = \"%s\", initialValue = 1, allocationSize = 1)", seqName, seqName);
+                    out.println("    @SequenceGenerator(name = \"%s\", sequenceName = \"%s\", initialValue = 1, allocationSize = %d)", seqName, seqName, allocationSize);
                 }
+            }
+
+            // @Version
+            if (versionPattern != null && !versionPattern.isEmpty()
+                    && column.getOutputName().matches(versionPattern)) {
+                out.println("    @Version");
             }
 
             // @Column
@@ -164,7 +199,33 @@ public class GspJpaEntityGenerator extends JavaGenerator {
             out.println(colAnnotation.toString());
 
             // フィールド宣言
-            out.println("    public %s %s;", getSimpleJavaType(javaType), fieldName);
+            String simpleType = getSimpleJavaType(javaType);
+            out.println("    %s %s %s;", accessModifier, simpleType, fieldName);
+
+            // アクセサ用にフィールド情報を保存
+            if (useAccessor) {
+                fieldNames.add(fieldName);
+                fieldSimpleTypes.add(simpleType);
+            }
+        }
+
+        // アクセサ（getter/setter）の生成
+        if (useAccessor) {
+            for (int i = 0; i < fieldNames.size(); i++) {
+                String fieldName = fieldNames.get(i);
+                String simpleType = fieldSimpleTypes.get(i);
+                String capitalizedName = Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
+                String getterPrefix = "boolean".equals(simpleType) ? "is" : "get";
+
+                out.println();
+                out.println("    public %s %s%s() {", simpleType, getterPrefix, capitalizedName);
+                out.println("        return %s;", fieldName);
+                out.println("    }");
+                out.println();
+                out.println("    public void set%s(%s %s) {", capitalizedName, simpleType, fieldName);
+                out.println("        this.%s = %s;", fieldName, fieldName);
+                out.println("    }");
+            }
         }
 
         // クラスの閉じ
@@ -206,6 +267,7 @@ public class GspJpaEntityGenerator extends JavaGenerator {
 
     /**
      * カラムのJava型名を取得する。
+     * ForcedType（userType）が設定されている場合はそちらを優先する。
      */
     private String getJavaType(ColumnDefinition column) {
         DataTypeDefinition type = column.getType();
@@ -213,41 +275,7 @@ public class GspJpaEntityGenerator extends JavaGenerator {
         if (userType != null && !userType.isEmpty()) {
             return userType;
         }
-        return getJavaType(type);
-    }
-
-    /**
-     * DataTypeDefinitionからJava型名を取得する。
-     */
-    private String getJavaType(DataTypeDefinition type) {
-        String typeName = type.getType().toUpperCase();
-        int precision = type.getPrecision();
-        int scale = type.getScale();
-
-        return switch (typeName) {
-            case "INTEGER", "INT", "INT4" -> "java.lang.Integer";
-            case "BIGINT", "INT8" -> "java.lang.Long";
-            case "SMALLINT", "INT2", "TINYINT" -> "java.lang.Short";
-            case "VARCHAR", "CHARACTER VARYING", "NVARCHAR", "TEXT", "CLOB", "CHAR", "CHARACTER" -> "java.lang.String";
-            case "BOOLEAN", "BOOL", "BIT" -> "boolean";
-            case "DECIMAL", "NUMERIC" -> {
-                if (scale == 0 && precision == 1) yield "boolean";
-                if (scale == 0 && precision < 5) yield "java.lang.Short";
-                if (scale == 0 && precision < 10) yield "java.lang.Integer";
-                if (scale == 0 && precision < 19) yield "java.lang.Long";
-                yield "java.math.BigDecimal";
-            }
-            case "REAL", "FLOAT4" -> "java.lang.Float";
-            case "DOUBLE", "DOUBLE PRECISION", "FLOAT8", "FLOAT" -> "java.lang.Double";
-            case "DATE" -> "java.sql.Date";
-            case "TIME" -> "java.sql.Time";
-            case "TIMESTAMP", "DATETIME", "SMALLDATETIME" -> "java.sql.Timestamp";
-            case "BLOB", "BINARY", "VARBINARY", "BYTEA" -> "byte[]";
-            default -> {
-                if (typeName.startsWith("TIMESTAMP")) yield "java.sql.Timestamp";
-                yield "java.lang.String";
-            }
-        };
+        return GspColumnTypeMapper.getJavaType(type);
     }
 
     /**
@@ -258,6 +286,9 @@ public class GspJpaEntityGenerator extends JavaGenerator {
         boolean needsSqlTime = false;
         boolean needsSqlTimestamp = false;
         boolean needsBigDecimal = false;
+        boolean needsLocalDate = false;
+        boolean needsLocalTime = false;
+        boolean needsLocalDateTime = false;
 
         for (ColumnDefinition column : columns) {
             String javaType = getJavaType(column);
@@ -265,12 +296,18 @@ public class GspJpaEntityGenerator extends JavaGenerator {
             if ("java.sql.Time".equals(javaType)) needsSqlTime = true;
             if ("java.sql.Timestamp".equals(javaType)) needsSqlTimestamp = true;
             if ("java.math.BigDecimal".equals(javaType)) needsBigDecimal = true;
+            if ("java.time.LocalDate".equals(javaType)) needsLocalDate = true;
+            if ("java.time.LocalTime".equals(javaType)) needsLocalTime = true;
+            if ("java.time.LocalDateTime".equals(javaType)) needsLocalDateTime = true;
         }
 
         if (needsBigDecimal) out.println("import java.math.BigDecimal;");
         if (needsSqlDate) out.println("import java.sql.Date;");
         if (needsSqlTime) out.println("import java.sql.Time;");
         if (needsSqlTimestamp) out.println("import java.sql.Timestamp;");
+        if (needsLocalDate) out.println("import java.time.LocalDate;");
+        if (needsLocalDateTime) out.println("import java.time.LocalDateTime;");
+        if (needsLocalTime) out.println("import java.time.LocalTime;");
     }
 
     /**
